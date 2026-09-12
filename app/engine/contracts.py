@@ -63,12 +63,19 @@ def ensure_daily_contracts(cur, user_id: int) -> List[Dict[str, Any]]:
     all_res = list(SUPPORTED_RESOURCES)
     selected_res = []
     # Use modulo arithmetic on hash to pick 3 distinct resources
-    for shift in (0, 5, 10, 15, 20):
+    for shift in (0, 5, 10, 15, 20, 25, 30):
         res = all_res[(h >> shift) % len(all_res)]
         if res not in selected_res:
             selected_res.append(res)
         if len(selected_res) == 3:
             break
+
+    if len(selected_res) < 3:
+        for res in all_res:
+            if res not in selected_res:
+                selected_res.append(res)
+            if len(selected_res) == 3:
+                break
 
     # Expiration is 23:59:59 UTC of today
     midnight_utc = datetime.combine(today, dtime(23, 59, 59), tzinfo=timezone.utc)

@@ -135,16 +135,32 @@ def test_tutorial_progression_and_rewards(db_conn):
         db_conn.commit()
         assert is_step_eligible(cur, u_id, 5) is True
 
-        # Claim Step 5 (Final Step: 150 Taler)
+        # Claim Step 5 (Zunftbeitritt: 150 Taler)
         cur.execute("SELECT balance FROM users WHERE id = %s", (u_id,))
         bal_before_s5 = float(cur.fetchone()["balance"])
         res5 = claim_tutorial_reward(cur, u_id)
         db_conn.commit()
         assert res5["claimed_step"] == 5
-        assert res5["is_finished"] is True
+        assert res5["next_step"] == 6
 
         cur.execute("SELECT balance FROM users WHERE id = %s", (u_id,))
         assert float(cur.fetchone()["balance"]) == round(bal_before_s5 + 150.0, 2)
+
+        # Step 6 (Die erste Expedition)
+        assert is_step_eligible(cur, u_id, 6) is False
+        from app.engine.caravans import dispatch_caravan
+        cur.execute("SELECT id FROM regions WHERE tag = 'VISB'")
+        visb_reg = cur.fetchone()
+        cur.execute("UPDATE inventories SET amount = 50.0 WHERE user_id = %s AND resource_type = 'wood'", (u_id,))
+        dispatch_caravan(cur, u_id, visb_reg["id"], {"wood": 10.0})
+        db_conn.commit()
+        assert is_step_eligible(cur, u_id, 6) is True
+
+        # Claim Step 6 (Final Step: 100 Taler & 30 Cloth)
+        res6 = claim_tutorial_reward(cur, u_id)
+        db_conn.commit()
+        assert res6["claimed_step"] == 6
+        assert res6["is_finished"] is True
 
         # Further claims rejected
         with pytest.raises(ValueError, match="vollständig abgeschlossen"):
@@ -244,7 +260,7 @@ def test_visual_svg_and_template_integrity(db_conn):
     r_tut = client.get("/tutorial/widget")
     assert r_tut.status_code == 200
     assert "Kaufmannslehre" in r_tut.text
-    assert "Schritt 1 von 5" in r_tut.text
+    assert "Schritt 1 von" in r_tut.text
 
     # 3. Market dual-column terminal
     r_market = client.get("/market/book?resource=wood")

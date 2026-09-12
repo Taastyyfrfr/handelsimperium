@@ -14,6 +14,8 @@ from app.config import (
     GUILD_CREATION_FEE,
     STARTER_CONFIG,
     SUPPORTED_RESOURCES,
+    CARAVAN_MAX_CARGO,
+    TRANSIT_SPEED_FACTOR,
 )
 from app.engine.tutorial import TUTORIAL_STEPS
 
@@ -47,5 +49,7 @@ def get_handbook(
             "starter_config": STARTER_CONFIG,
             "tutorial_steps": TUTORIAL_STEPS,
             "supported_resources": SUPPORTED_RESOURCES,
+            "caravan_max_cargo": CARAVAN_MAX_CARGO,
+            "transit_speed_factor": TRANSIT_SPEED_FACTOR,
         },
     )

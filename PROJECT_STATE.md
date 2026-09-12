@@ -1,8 +1,8 @@
 # Project State: Handelsimperium
 
-**Generated:** 2026-09-12T22:32:00+02:00  
+**Generated:** 2026-09-12T22:42:00+02:00  
 **Repository Branch:** `master`  
-**Current Phase:** Phase 8 (Regional Specialization & Asymmetric Resource Scarcity)  
+**Current Phase:** Phase 9 (Caravan Expeditions, Travel Durations & Regional Depots)  
 **Production Host:** `80.158.79.44` (`ssh server`)  
 **Public Endpoint:** [http://80.158.79.44/](http://80.158.79.44/)
 
@@ -104,7 +104,7 @@
 ### 2.8 `notifications` (Phase 5)
 - `id`: `SERIAL PRIMARY KEY`
 - `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
-- `event_type`: `VARCHAR(32) NOT NULL` (`TRADE_EXECUTED`, `CONTRACT_FULFILLED`, `STORAGE_OVERFLOW`, `GUILD_CREATED`, `GUILD_JOINED`, `MONUMENT_COMPLETED`, `TUTORIAL_REWARD_CLAIMED`)
+- `event_type`: `VARCHAR(32) NOT NULL` (`TRADE_EXECUTED`, `CONTRACT_FULFILLED`, `STORAGE_OVERFLOW`, `GUILD_CREATED`, `GUILD_JOINED`, `MONUMENT_COMPLETED`, `TUTORIAL_REWARD_CLAIMED`, `CARAVAN_DISPATCHED`, `CARAVAN_ARRIVED`, `CARAVAN_UNLOADED`, `DEPOT_TRANSFERRED`)
 - `payload`: `JSONB NOT NULL DEFAULT '{}'::jsonb`
 - `is_read`: `BOOLEAN NOT NULL DEFAULT FALSE`
 - `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
@@ -162,13 +162,36 @@
 - *Index:* `idx_guild_projects_lookup ON (guild_id, is_completed)`
 - *Index:* `idx_guild_projects_perk ON (guild_id, project_type, is_completed)`
 
-### 2.14 `user_tutorials` (Phase 7)
+### 2.14 `user_tutorials` (Phase 7 & Phase 9)
 - `user_id`: `INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE`
 - `current_step`: `INT NOT NULL DEFAULT 1`
 - `completed_steps`: `JSONB NOT NULL DEFAULT '[]'::jsonb`
 - `is_finished`: `BOOLEAN NOT NULL DEFAULT FALSE`
 - `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - *Index:* `idx_user_tutorials_lookup ON (user_id, is_finished)`
+
+### 2.15 `caravans` (Phase 9)
+- `id`: `SERIAL PRIMARY KEY`
+- `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
+- `origin_region_id`: `INT NOT NULL REFERENCES regions(id)`
+- `destination_region_id`: `INT NOT NULL REFERENCES regions(id)`
+- `cargo`: `JSONB NOT NULL DEFAULT '{}'::jsonb`
+- `departure_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- `arrival_at`: `TIMESTAMPTZ NOT NULL`
+- `status`: `VARCHAR(16) NOT NULL DEFAULT 'EN_ROUTE'` (`EN_ROUTE`, `ARRIVED`, `UNLOADED`, `CANCELLED`)
+- `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- *Constraint:* `CHECK (status IN ('EN_ROUTE', 'ARRIVED', 'UNLOADED', 'CANCELLED'))`
+- *Index:* `idx_caravans_user_status_arrival ON caravans(user_id, status, arrival_at)`
+
+### 2.16 `regional_depots` (Phase 9)
+- `id`: `SERIAL PRIMARY KEY`
+- `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
+- `region_id`: `INT NOT NULL REFERENCES regions(id)`
+- `resource_type`: `VARCHAR(32) NOT NULL`
+- `amount`: `NUMERIC(14, 2) NOT NULL DEFAULT 0.0`
+- `last_updated_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- *Constraint:* `UNIQUE (user_id, region_id, resource_type)`
+- *Index:* `idx_regional_depots_user_region ON regional_depots(user_id, region_id)`
 
 ---
 
@@ -203,6 +226,17 @@ $$\text{SunkCapital}(b, L) = \sum_{k=1}^{L-1} \left[ \text{cost}_{\text{balance}
 - **Alliance Freihafen Perk:** Reduces seller market fee down to $1.5\%$ if the seller's guild has completed the `FREIHAFEN` monument.
 - **Export Contracts ("Handelskarawanen"):** 3 daily contracts expiring midnight UTC; consumed resources are permanently deleted from circulation in exchange for guaranteed Taler payouts.
 - **Guild Founding Fee:** $500.00$ Taler permanently deducted upon founding an alliance.
+
+### 3.7 Caravan Transit & Regional Logistics (Phase 9)
+$$\text{distance} = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2} \quad \text{[in Seemeilen / sm, gerundet auf 2 Dezimalstellen]}$$
+$$\text{duration\_seconds} = \text{round}(\text{distance} \times 12.0)$$
+$$\text{arrival\_at} = \text{departure\_at} + \Delta t_{\text{duration}}$$
+$$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \quad \text{[Max. Karawanen-Zuladung]}$$
+
+- **Atomic Inventory Deduction:** Cargo is locked and subtracted from Kontor inventory at departure via `SELECT ... FOR UPDATE`.
+- **Deterministic Arrival Resolution:** On queries or actions, status transitions from `EN_ROUTE` to `ARRIVED` whenever `NOW() >= arrival_at`.
+- **Regional Depots:** Arrived caravans unload goods into the destination region's `regional_depots` record via atomic upsert (`ON CONFLICT (user_id, region_id, resource_type) DO UPDATE`).
+- **Kontor Transfer:** Stockpiled depot commodities can be transferred back into the home Kontor warehouse, bounded by available warehouse storage capacity.
 
 ---
 
@@ -258,7 +292,7 @@ $$\text{SunkCapital}(b, L) = \sum_{k=1}^{L-1} \left[ \text{cost}_{\text{balance}
 - **Modular Onboarding Quest Engine ("Kaufmannslehre"):**
   - `GET /tutorial/widget` (Persistent, dismissible quest widget on the dashboard).
   - `POST /tutorial/claim` (Atomic eligibility verification, milestone progression, and reward disbursement).
-  - 5 Progressive Milestones: Bestandsaufnahme (25 Taler), Expansion (50 Taler), Marktzugang (25 Wood/Stone), Fernhandel (100 Taler), Zunftbeitritt (150 Taler).
+  - Progressive Milestones: Bestandsaufnahme (25 Taler), Expansion (50 Taler), Marktzugang (25 Wood/Stone), Fernhandel (100 Taler), Zunftbeitritt (150 Taler).
 - **Living In-Game Merchant Handbook ("Das Kontor-Handbuch"):**
   - `GET /handbuch` (Indexed reference manual directly exposing backend formulas, building costs, reference prices, and guild perks).
 
@@ -275,18 +309,36 @@ $$\text{SunkCapital}(b, L) = \sum_{k=1}^{L-1} \left[ \text{cost}_{\text{balance}
   - `GET /auth/register` & `POST /auth/register`: Card-based region selector displaying coordinates, lore, bonuses, and deficits; validates selection against database.
   - Top navigation bar & Kontor resource overview render merchant's Home Region badge with Tag and Coordinates.
   - Commodity cards and building tables dynamically badge active modifiers (`+50% Bonus`, `-20% Malus`, `0.0x Reine Importware`) and disable upgrades for non-indigenous resources with *"Nicht förderbar"*.
+
+### Phase 9: Caravan Expeditions, Travel Durations & Regional Depots
+- **Database Migration (`008_phase9_caravans.sql`):**
+  - `caravans` table tracking origin, destination, JSONB cargo, departure, arrival timestamps, and status (`EN_ROUTE`, `ARRIVED`, `UNLOADED`, `CANCELLED`).
+  - `regional_depots` table providing persistent storage per merchant, region, and commodity with unique constraints.
+  - Composite indexes for rapid arrival status resolution and depot lookups.
+- **Logistics & Transit Engine (`app/engine/caravans.py`):**
+  - `calculate_distance`: Euclidean metric $\sqrt{\Delta x^2 + \Delta y^2}$.
+  - `calculate_travel_duration`: $\text{round}(\text{distance} \times 12.0)$ seconds.
+  - `dispatch_caravan`: Enforces 250-unit capacity cap, non-negative amounts, and distinct regions; atomically locks and deducts inventory from the Kontor warehouse.
+  - `resolve_caravan_statuses`: Transitions expired transit routes from `EN_ROUTE` to `ARRIVED` with `CARAVAN_ARRIVED` notifications.
+  - `unload_caravan`: Safely transfers cargo into `regional_depots` at destination and updates status to `UNLOADED`.
+  - `transfer_depot_to_kontor`: Moves stockpiled goods from foreign depots into Kontor inventories up to warehouse storage capacity.
+- **Frontend Logistics Terminal (`GET /expeditions` & `app/templates/components/expeditions.html`):**
+  - Dedicated navigation tab with SVG compass rose icon.
+  - Active caravans monitor with live countdown timers, animated progress bars, and "Waren im Depot entladen" action buttons.
+  - Interactive expedition console with destination selector, real-time cargo total calculation, and 250-unit capacity guard.
+  - Foreign regional depots overview with single-click "Depot in Kontor überführen" action.
 - **Synchronized Tutorial & Living Handbook:**
-  - Tutorial Steps 1 & 3 emphasize regional specialization, inter-regional trade interdependence, and exchange imports.
-  - In-Game Handbook (`/handbuch`) section 3 incorporates the **Hanseatische Regionalmatrix** table comparing all 4 centers across all 5 goods.
+  - Tutorial Step 6 ("6. Die erste Expedition"): Disburses 100.00 Taler & 30.00 Tuch upon dispatching an overseas expedition, completing the 6-step merchant curriculum.
+  - Merchant Handbook (`/handbuch`): Added Section 8 ("Logistik, Übersee-Expeditionen & Regionaldepots") with formulas, capacity limits, and depot mechanics.
 
 ---
 
 ## 5. Test Suite Metrics
 
 All tests execute cleanly directly against PostgreSQL on the production server:
-- **Total Test Files:** 11
-- **Total Tests:** 42
-- **Pass Rate:** 100% (42 passed in 8.74s)
+- **Total Test Files:** 12
+- **Total Tests:** 48
+- **Pass Rate:** 100% (48 passed in 9.04s)
 
 | Test File | Tests | Coverage Scope |
 | :--- | :--- | :--- |
@@ -297,8 +349,9 @@ All tests execute cleanly directly against PostgreSQL on the production server:
 | `tests/test_phase4_features.py` | 5 | Net worth math, capital conservation, ranking cache, CSRF middleware, PWA assets |
 | `tests/test_phase5_features.py` | 4 | Export contracts, trade notification dispatch, economic telemetry, HTMX flow |
 | `tests/test_phase6_guilds.py` | 5 | Guild founding, succession, monument contributions, Freihafen fee perk, Speicherstadt cap perk, HTMX flow |
-| `tests/test_phase7_tutorial.py` | 4 | 5-step tutorial quest progression & rewards, duplicate claim prevention, handbook accuracy, SVG template integrity |
+| `tests/test_phase7_tutorial.py` | 4 | 6-step tutorial quest progression & rewards, duplicate claim prevention, handbook accuracy, SVG template integrity |
 | `tests/test_phase8_regions.py` | 6 | Registration validation, regional yield scaling, 0.0-yield upgrade blocking, warehouse universal upgrades, matrix & UI badges |
+| `tests/test_phase9_caravans.py` | 6 | Euclidean distance & transit duration math, capacity limits, atomic deduction, arrival status resolution, depot unloading & transfer, tutorial step 6 claim, HTTP rendering |
 | `tests/test_production.py` | 2 | Offline production delta calculation and storage cap enforcement |
 | `tests/test_progression_and_cancel.py` | 5 | Multi-resource upgrade sufficiency/rollback, warehouse cap, aggregated depth |
 
@@ -306,7 +359,6 @@ All tests execute cleanly directly against PostgreSQL on the production server:
 
 ## 6. Outstanding Backlog & Roadmap
 
-1. **Regional Trade Routes & Travel Delays:** Multi-city map with geographic distance, caravan travel time, and regional price arbitrage.
-2. **Dynamic Price Bands & Volatility Limits:** Circuit breakers preventing drastic market manipulation during sudden low-liquidity shocks.
-3. **Guild Treasury War Chest & Territory Auctions:** Alliances bid on regional trading posts and port monopolies.
-4. **Automated Continuous Integration (CI):** GitHub Actions workflow running `pytest` against test PostgreSQL containers on pull requests.
+1. **Dynamic Price Bands & Volatility Limits:** Circuit breakers preventing drastic market manipulation during sudden low-liquidity shocks.
+2. **Guild Treasury War Chest & Territory Auctions:** Alliances bid on regional trading posts and port monopolies.
+3. **Automated Continuous Integration (CI):** GitHub Actions workflow running `pytest` against test PostgreSQL containers on pull requests.

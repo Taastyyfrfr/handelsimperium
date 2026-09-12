@@ -43,6 +43,14 @@ TUTORIAL_STEPS = {
         "reward_desc": "150.00 Taler Hanse-Segen",
         "reward": {"balance": 150.0, "resources": {}},
     },
+    6: {
+        "step_id": 6,
+        "title": "6. Die erste Expedition",
+        "description": "Erweitere Deinen Einflussbereich über die Meere: Rüste eine Handelskarawane aus und entsende Waren in eine andere Hansestadt.",
+        "requirement_text": "Mindestens eine Karawane zu einer fremden Region entsenden.",
+        "reward_desc": "100.00 Taler & 30 Tuch",
+        "reward": {"balance": 100.0, "resources": {"cloth": 30.0}},
+    },
 }
 
 def ensure_user_tutorial(cur, user_id: int) -> Dict[str, Any]:
@@ -127,6 +135,14 @@ def is_step_eligible(cur, user_id: int, step_id: int) -> bool:
         # Step 5: Member of a guild
         cur.execute(
             "SELECT 1 FROM guild_members WHERE user_id = %s LIMIT 1",
+            (user_id,),
+        )
+        return cur.fetchone() is not None
+
+    elif step_id == 6:
+        # Step 6: Dispatched at least 1 caravan
+        cur.execute(
+            "SELECT 1 FROM caravans WHERE user_id = %s LIMIT 1",
             (user_id,),
         )
         return cur.fetchone() is not None

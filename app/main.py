@@ -17,6 +17,7 @@ from app.routes.guilds import router as guilds_router
 from app.routes.tutorial import router as tutorial_router
 from app.routes.handbook import router as handbook_router
 from app.routes.admin import router as admin_router
+from app.routes.caravans import router as caravans_router
 import os
 
 @asynccontextmanager
@@ -56,6 +57,7 @@ app.include_router(guilds_router)
 app.include_router(tutorial_router)
 app.include_router(handbook_router)
 app.include_router(admin_router)
+app.include_router(caravans_router)
 
 @app.get("/health")
 @app.head("/health")

@@ -161,3 +161,7 @@ GUILD_PROJECT_CONFIG = {
     },
 }
 
+# Phase 9: Caravan Logistics Configuration
+CARAVAN_MAX_CARGO: float = 250.0  # Max total goods units per expedition
+TRANSIT_SPEED_FACTOR: float = 12.0  # Transit duration in seconds per Euclidean coordinate distance unit
+
