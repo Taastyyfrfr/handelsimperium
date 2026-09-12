@@ -14,6 +14,13 @@ def test_full_http_htmx_flow(db_conn):
 
 
     with httpx.Client(base_url=BASE_URL, follow_redirects=True) as client_a:
+        # Acquire CSRF session cookie
+        init_a = client_a.get("/auth/register")
+        assert init_a.status_code == 200
+        csrf_a = client_a.cookies.get("imperium_csrf")
+        if csrf_a:
+            client_a.headers["X-CSRF-Token"] = csrf_a
+
         # 1. Register User A
         reg_a = client_a.post("/auth/register", data={
             "username": user_a,
@@ -52,6 +59,12 @@ def test_full_http_htmx_flow(db_conn):
 
     # User B registers and sells wood to match User A's order
     with httpx.Client(base_url=BASE_URL, follow_redirects=True) as client_b:
+        init_b = client_b.get("/auth/register")
+        assert init_b.status_code == 200
+        csrf_b = client_b.cookies.get("imperium_csrf")
+        if csrf_b:
+            client_b.headers["X-CSRF-Token"] = csrf_b
+
         reg_b = client_b.post("/auth/register", data={
             "username": user_b,
             "password": "Password123!",

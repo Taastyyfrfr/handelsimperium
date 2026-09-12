@@ -37,6 +37,15 @@
                 <span>📜</span>
                 <span>Handelsprotokoll</span>
             </button>
+
+            <button id="tab-ranking"
+                    hx-get="/ranking"
+                    hx-target="#main-panel"
+                    hx-swap="innerHTML"
+                    class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center space-x-2 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100">
+                <span>🏆</span>
+                <span>Rangliste</span>
+            </button>
         </nav>
 
         <!-- Live Refresh Trigger -->

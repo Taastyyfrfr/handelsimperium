@@ -15,12 +15,23 @@ class Settings(BaseSettings):
     MARKET_FEE_RATE: float = 0.02  # 2% market fee
     BASE_STORAGE_CAP: float = 1000.0  # Base storage capacity per resource for Level 1 warehouse
     RATE_LIMIT_ENABLED: bool = True
+    CSRF_ENABLED: bool = True
+    CSRF_COOKIE_NAME: str = "imperium_csrf"
 
     @property
     def conn_str(self) -> str:
         return f"host={self.DB_HOST} port={self.DB_PORT} user={self.DB_USER} password={self.DB_PASS} dbname={self.DB_NAME}"
 
 settings = Settings()
+
+# Canonical reference commodity prices (fallback when no 24h trades exist)
+REFERENCE_PRICES = {
+    "wood": 4.00,
+    "stone": 5.00,
+    "iron": 12.00,
+    "grain": 3.00,
+    "cloth": 8.00,
+}
 
 # Starter package for new players
 STARTER_CONFIG = {

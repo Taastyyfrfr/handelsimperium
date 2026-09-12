@@ -80,7 +80,7 @@
     <!-- Grid: Order Creation Form + Aggregated Order Book Depth -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Order Placement Form (1 Col) -->
-        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col justify-between">
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col justify-between" id="order-placement-card">
             <div>
                 <h3 class="text-md font-bold text-amber-400 mb-1 flex items-center space-x-2">
                     <span>✍️</span>
@@ -94,11 +94,11 @@
                 <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs mb-4 space-y-1">
                     <div class="flex justify-between">
                         <span class="text-slate-400">Verfügbare Taler:</span>
-                        <span class="font-mono text-amber-300 font-bold">{{ "%.2f"|format(user.balance) }}</span>
+                        <span class="font-mono text-amber-300 font-bold" id="form-user-balance">{{ "%.2f"|format(user.balance) }}</span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-slate-400">Im Lager ({{ current_resource }}):</span>
-                        <span class="font-mono text-slate-200 font-bold">{{ "%.2f"|format(user_inventory) }}</span>
+                        <span class="font-mono text-slate-200 font-bold" id="form-user-inventory">{{ "%.2f"|format(user_inventory) }}</span>
                     </div>
                 </div>
 
@@ -112,12 +112,12 @@
                     <div>
                         <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Ordertyp</label>
                         <div class="grid grid-cols-2 gap-2">
-                            <label class="flex items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-950 cursor-pointer has-[:checked]:bg-emerald-600/30 has-[:checked]:border-emerald-500 has-[:checked]:text-emerald-300 transition">
-                                <input type="radio" name="order_type" value="BUY" checked class="hidden">
+                            <label class="min-h-[44px] flex items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-950 cursor-pointer has-[:checked]:bg-emerald-600/30 has-[:checked]:border-emerald-500 has-[:checked]:text-emerald-300 transition select-none">
+                                <input type="radio" name="order_type" id="order-type-buy" value="BUY" checked class="hidden">
                                 <span class="text-xs font-bold uppercase">Kauf (BUY)</span>
                             </label>
-                            <label class="flex items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-950 cursor-pointer has-[:checked]:bg-red-600/30 has-[:checked]:border-red-500 has-[:checked]:text-red-300 transition">
-                                <input type="radio" name="order_type" value="SELL" class="hidden">
+                            <label class="min-h-[44px] flex items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-950 cursor-pointer has-[:checked]:bg-red-600/30 has-[:checked]:border-red-500 has-[:checked]:text-red-300 transition select-none">
+                                <input type="radio" name="order_type" id="order-type-sell" value="SELL" class="hidden">
                                 <span class="text-xs font-bold uppercase">Verkauf (SELL)</span>
                             </label>
                         </div>
@@ -126,8 +126,8 @@
                     <!-- Amount -->
                     <div>
                         <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Menge (Ganze Einheiten)</label>
-                        <input type="number" step="1" min="1" max="100000" name="amount" value="10" required
-                               class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 font-mono focus:outline-none focus:border-amber-500 transition">
+                        <input type="number" step="1" min="1" max="100000" name="amount" id="order-amount-input" value="10" required
+                               class="w-full min-h-[44px] px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 font-mono focus:outline-none focus:border-amber-500 transition">
                     </div>
 
                     <!-- Limit Price -->
@@ -138,8 +138,8 @@
                             <span class="text-[10px] text-amber-400 font-mono">VWAP: {{ "%.2f"|format(vwap_24h) }}</span>
                             {% endif %}
                         </div>
-                        <input type="number" step="0.05" min="0.01" max="1000000" name="limit_price" value="{% if vwap_24h %}{{ vwap_24h }}{% elif last_price %}{{ last_price }}{% else %}5.00{% endif %}" required
-                               class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 font-mono focus:outline-none focus:border-amber-500 transition">
+                        <input type="number" step="0.05" min="0.01" max="1000000" name="limit_price" id="order-limit-price-input" value="{% if vwap_24h %}{{ vwap_24h }}{% elif last_price %}{{ last_price }}{% else %}5.00{% endif %}" required
+                               class="w-full min-h-[44px] px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 font-mono focus:outline-none focus:border-amber-500 transition">
                     </div>
 
                     <div class="text-[11px] text-slate-500 italic">
@@ -147,7 +147,7 @@
                     </div>
 
                     <button type="submit"
-                            class="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-lg shadow-lg hover:shadow-amber-600/30 transition">
+                            class="w-full min-h-[44px] py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-lg shadow-lg hover:shadow-amber-600/30 transition flex items-center justify-center">
                         Order einstellen
                     </button>
                 </form>
@@ -192,8 +192,15 @@
                             </thead>
                             <tbody class="divide-y divide-slate-800/40 font-mono">
                                 {% for b in bids %}
-                                <tr class="hover:bg-slate-900/50 transition {% if b.has_own %}bg-amber-950/20 text-amber-300 border-l-2 border-amber-500{% endif %}">
-                                    <td class="py-2 px-3 font-bold text-emerald-400">{{ "%.2f"|format(b.limit_price) }}</td>
+                                <tr onclick="quickFillOrder('SELL', {{ b.limit_price }}, {{ b.total_amount }})"
+                                    class="hover:bg-slate-800/80 cursor-pointer transition select-none {% if b.has_own %}bg-amber-950/20 text-amber-300 border-l-2 border-amber-500{% endif %}"
+                                    title="⚡ Klick: Limitpreis & Verkaufsmenge sofort ins Formular übernehmen">
+                                    <td class="py-2 px-3 font-bold text-emerald-400">
+                                        <div class="flex items-center justify-between">
+                                            <span>{{ "%.2f"|format(b.limit_price) }}</span>
+                                            <span class="text-[10px] text-amber-400/70 ml-1">⚡</span>
+                                        </div>
+                                    </td>
                                     <td class="py-2 px-3 text-right text-slate-200">{{ "%.2f"|format(b.total_amount) }}</td>
                                     <td class="py-2 px-3 text-right text-[11px] text-slate-400">{{ b.order_count }}</td>
                                     <td class="py-2 px-3 text-right text-slate-400 text-[11px]">{{ "%.2f"|format(b.cumulative_amount) }}</td>
@@ -226,8 +233,15 @@
                             </thead>
                             <tbody class="divide-y divide-slate-800/40 font-mono">
                                 {% for a in asks %}
-                                <tr class="hover:bg-slate-900/50 transition {% if a.has_own %}bg-amber-950/20 text-amber-300 border-l-2 border-amber-500{% endif %}">
-                                    <td class="py-2 px-3 font-bold text-red-400">{{ "%.2f"|format(a.limit_price) }}</td>
+                                <tr onclick="quickFillOrder('BUY', {{ a.limit_price }}, {{ a.total_amount }})"
+                                    class="hover:bg-slate-800/80 cursor-pointer transition select-none {% if a.has_own %}bg-amber-950/20 text-amber-300 border-l-2 border-amber-500{% endif %}"
+                                    title="⚡ Klick: Limitpreis & Kaufmenge sofort ins Formular übernehmen">
+                                    <td class="py-2 px-3 font-bold text-red-400">
+                                        <div class="flex items-center justify-between">
+                                            <span>{{ "%.2f"|format(a.limit_price) }}</span>
+                                            <span class="text-[10px] text-amber-400/70 ml-1">⚡</span>
+                                        </div>
+                                    </td>
                                     <td class="py-2 px-3 text-right text-slate-200">{{ "%.2f"|format(a.total_amount) }}</td>
                                     <td class="py-2 px-3 text-right text-[11px] text-slate-400">{{ a.order_count }}</td>
                                     <td class="py-2 px-3 text-right text-slate-400 text-[11px]">{{ "%.2f"|format(a.cumulative_amount) }}</td>
@@ -358,3 +372,52 @@
         </div>
     </div>
 </div>
+
+<script>
+    function quickFillOrder(orderType, price, maxVolume) {
+        const buyRadio = document.getElementById('order-type-buy');
+        const sellRadio = document.getElementById('order-type-sell');
+        const priceInput = document.getElementById('order-limit-price-input');
+        const amountInput = document.getElementById('order-amount-input');
+        const userBalance = parseFloat('{{ user.balance }}') || 0;
+        const userInventory = parseFloat('{{ user_inventory }}') || 0;
+
+        if (orderType === 'BUY') {
+            if (buyRadio) {
+                buyRadio.checked = true;
+                buyRadio.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            if (priceInput) priceInput.value = parseFloat(price).toFixed(2);
+            let maxAffordable = price > 0 ? Math.floor(userBalance / price) : 1;
+            let amt = Math.min(Math.floor(maxVolume), maxAffordable);
+            if (amt < 1) amt = 1;
+            if (amountInput) amountInput.value = amt;
+        } else {
+            if (sellRadio) {
+                sellRadio.checked = true;
+                sellRadio.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            if (priceInput) priceInput.value = parseFloat(price).toFixed(2);
+            let maxAvailable = Math.floor(userInventory);
+            let amt = Math.min(Math.floor(maxVolume), maxAvailable);
+            if (amt < 1) amt = 1;
+            if (amountInput) amountInput.value = amt;
+        }
+
+        // Highlight input fields
+        if (priceInput && amountInput) {
+            priceInput.classList.add('ring-2', 'ring-amber-400');
+            amountInput.classList.add('ring-2', 'ring-amber-400');
+            setTimeout(() => {
+                priceInput.classList.remove('ring-2', 'ring-amber-400');
+                amountInput.classList.remove('ring-2', 'ring-amber-400');
+            }, 800);
+        }
+
+        // Smooth scroll to order placement on small screens
+        const card = document.getElementById('order-placement-card');
+        if (card && window.innerWidth < 1024) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+</script>

@@ -2,8 +2,18 @@
 <html lang="de" class="h-full bg-slate-950 text-slate-100">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
     <title>{% block title %}Handelsimperium{% endblock %}</title>
+
+    <!-- PWA & Mobile Web App Meta -->
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+    <meta name="theme-color" content="#020617">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Handelsimperium">
+
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -27,9 +37,12 @@
     <style>
         .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
         .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+        /* Prevent accidental horizontal scrolling on mobile */
+        html, body { overflow-x: hidden; max-width: 100vw; }
     </style>
 </head>
-<body class="h-full flex flex-col font-sans selection:bg-amber-500 selection:text-black">
+<body class="h-full flex flex-col font-sans selection:bg-amber-500 selection:text-black overflow-x-hidden"
+      hx-headers='{"X-CSRF-Token": "{{ request.state.csrf_token }}"}'>
     <!-- Top Header / Navigation -->
     <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -72,5 +85,18 @@
     <footer class="border-t border-slate-800/60 py-4 text-center text-xs text-slate-500">
         Handelsimperium &copy; 2026 &bull; Offline-Produktion &bull; Atomares Orderbuch (2% Marktgebühr)
     </footer>
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/static/sw.js').then(function(reg) {
+                    console.debug('ServiceWorker registered successfully with scope:', reg.scope);
+                }).catch(function(err) {
+                    console.debug('ServiceWorker registration omitted:', err);
+                });
+            });
+        }
+    </script>
 </body>
 </html>

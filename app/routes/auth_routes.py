@@ -42,12 +42,17 @@ def login(
             
             token = create_session_token(user["id"], user["username"])
             redirect = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+            is_secure = (
+                request.url.scheme == "https"
+                or request.headers.get("x-forwarded-proto") == "https"
+            )
             redirect.set_cookie(
                 key=settings.COOKIE_NAME,
                 value=token,
                 httponly=True,
                 max_age=86400 * 7,
                 samesite="lax",
+                secure=is_secure,
             )
             return redirect
 
@@ -114,12 +119,17 @@ def register(
 
             token = create_session_token(user_id, username)
             redirect = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+            is_secure = (
+                request.url.scheme == "https"
+                or request.headers.get("x-forwarded-proto") == "https"
+            )
             redirect.set_cookie(
                 key=settings.COOKIE_NAME,
                 value=token,
                 httponly=True,
                 max_age=86400 * 7,
                 samesite="lax",
+                secure=is_secure,
             )
             return redirect
 

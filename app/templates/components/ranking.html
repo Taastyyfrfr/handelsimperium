@@ -1,0 +1,189 @@
+<!-- Merchant Leaderboard / Rangliste (HTMX Partial) -->
+<div class="space-y-6">
+    <!-- Header & Cache Status Bar -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-4">
+        <div>
+            <h2 class="text-xl font-extrabold text-amber-400 flex items-center space-x-2">
+                <span>🏆</span>
+                <span>Rangliste der Kaufleute</span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">
+                Gesamtvermögen aller Hansehändler (Barvermögen + Warenwert + Kontor-Ausbauten)
+            </p>
+        </div>
+
+        <div class="flex items-center space-x-3 text-xs">
+            <div class="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-slate-400 flex items-center space-x-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span>Cache: Vor <strong>{{ cache_age_seconds }}s</strong> aktualisiert</span>
+                <span class="text-slate-600">|</span>
+                <span class="text-slate-400">Erneuerung in: <strong>{{ next_refresh_seconds }}s</strong></span>
+            </div>
+            <button hx-get="/ranking"
+                    hx-target="#main-panel"
+                    hx-swap="innerHTML"
+                    class="min-h-[38px] px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition border border-slate-700 cursor-pointer">
+                🔄 Aktualisieren
+            </button>
+        </div>
+    </div>
+
+    <!-- Authenticated Merchant Stat Card (Your Rank & Breakdown) -->
+    {% if user_entry %}
+    <div class="bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-900 border-2 border-amber-500/50 rounded-2xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
+        <div class="absolute -right-8 -top-8 text-8xl opacity-10 pointer-events-none">👑</div>
+        
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <div>
+                <span class="text-xs uppercase tracking-widest text-amber-400 font-bold block mb-1">Dein Kaufmanns-Stand</span>
+                <h3 class="text-2xl font-black text-slate-100 flex items-center space-x-3">
+                    <span>{{ user_entry.username }}</span>
+                    <span class="text-sm px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono font-bold">
+                        Rang #{{ user_entry.rank }} von {{ total_merchants }}
+                    </span>
+                </h3>
+            </div>
+            <div class="text-left md:text-right">
+                <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold block">Gesamtvermögen</span>
+                <span class="text-2xl sm:text-3xl font-mono font-black text-amber-300">
+                    {{ "%.2f"|format(user_entry.total_net_worth) }} <span class="text-sm font-sans font-normal text-amber-400">Taler</span>
+                </span>
+            </div>
+        </div>
+
+        <!-- 3-Pillar Breakdown -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-amber-500/20 text-xs">
+            <div class="bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                <div class="flex justify-between items-center text-slate-400 mb-1">
+                    <span class="flex items-center space-x-1.5 font-semibold">
+                        <span>🪙</span>
+                        <span>Barvermögen (Liquid)</span>
+                    </span>
+                    <span class="font-mono text-slate-500">
+                        {% if user_entry.total_net_worth > 0 %}
+                            {{ "%.1f"|format((user_entry.liquid_balance / user_entry.total_net_worth) * 100) }}%
+                        {% else %}0%{% endif %}
+                    </span>
+                </div>
+                <div class="text-base font-mono font-bold text-amber-300">
+                    {{ "%.2f"|format(user_entry.liquid_balance) }} Taler
+                </div>
+            </div>
+
+            <div class="bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                <div class="flex justify-between items-center text-slate-400 mb-1">
+                    <span class="flex items-center space-x-1.5 font-semibold">
+                        <span>📦</span>
+                        <span>Warenlager (24h-VWAP)</span>
+                    </span>
+                    <span class="font-mono text-slate-500">
+                        {% if user_entry.total_net_worth > 0 %}
+                            {{ "%.1f"|format((user_entry.commodity_value / user_entry.total_net_worth) * 100) }}%
+                        {% else %}0%{% endif %}
+                    </span>
+                </div>
+                <div class="text-base font-mono font-bold text-emerald-400">
+                    {{ "%.2f"|format(user_entry.commodity_value) }} Taler
+                </div>
+            </div>
+
+            <div class="bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                <div class="flex justify-between items-center text-slate-400 mb-1">
+                    <span class="flex items-center space-x-1.5 font-semibold">
+                        <span>🏗️</span>
+                        <span>Kontor & Gebäude</span>
+                    </span>
+                    <span class="font-mono text-slate-500">
+                        {% if user_entry.total_net_worth > 0 %}
+                            {{ "%.1f"|format((user_entry.building_capital / user_entry.total_net_worth) * 100) }}%
+                        {% else %}0%{% endif %}
+                    </span>
+                </div>
+                <div class="text-base font-mono font-bold text-sky-400">
+                    {{ "%.2f"|format(user_entry.building_capital) }} Taler
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Top 50 Leaderboard Table -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+        <div class="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
+            <h3 class="font-bold text-slate-200 text-sm flex items-center space-x-2">
+                <span>📜</span>
+                <span>Die 50 vermögendsten Handelsherren</span>
+            </h3>
+            <span class="text-xs text-slate-500 font-mono">Top {{ top_50|length }} von {{ total_merchants }}</span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-950 border-b border-slate-800 text-slate-400 uppercase tracking-wider font-semibold">
+                    <tr>
+                        <th class="py-3 px-3 sm:px-4 text-center w-16">Rang</th>
+                        <th class="py-3 px-3 sm:px-4">Kaufmann</th>
+                        <th class="py-3 px-3 sm:px-4 text-right">🪙 Bar</th>
+                        <th class="py-3 px-3 sm:px-4 text-right">📦 Waren</th>
+                        <th class="py-3 px-3 sm:px-4 text-right">🏗️ Kontor</th>
+                        <th class="py-3 px-3 sm:px-4 text-right">Gesamtvermögen</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/60 font-mono">
+                    {% for m in top_50 %}
+                    <tr class="transition {% if user and m.user_id == user.id %}bg-amber-950/30 border-l-4 border-amber-400 font-semibold{% else %}hover:bg-slate-800/30{% endif %}">
+                        <!-- Rank Badge -->
+                        <td class="py-3 px-3 sm:px-4 text-center">
+                            {% if m.rank == 1 %}
+                                <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500 font-bold text-sm" title="Platz 1">🥇</span>
+                            {% elif m.rank == 2 %}
+                                <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-400/20 text-slate-300 border border-slate-400 font-bold text-sm" title="Platz 2">🥈</span>
+                            {% elif m.rank == 3 %}
+                                <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700/20 text-amber-600 border border-amber-700 font-bold text-sm" title="Platz 3">🥉</span>
+                            {% else %}
+                                <span class="text-slate-500 font-bold">#{{ m.rank }}</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Username -->
+                        <td class="py-3 px-3 sm:px-4 font-sans font-medium text-slate-200">
+                            <span class="flex items-center space-x-2">
+                                <span>{{ m.username }}</span>
+                                {% if user and m.user_id == user.id %}
+                                    <span class="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">Du</span>
+                                {% endif %}
+                            </span>
+                        </td>
+
+                        <!-- Liquid Balance -->
+                        <td class="py-3 px-3 sm:px-4 text-right text-slate-400">
+                            {{ "%.2f"|format(m.liquid_balance) }}
+                        </td>
+
+                        <!-- Commodity Value -->
+                        <td class="py-3 px-3 sm:px-4 text-right text-emerald-400/90">
+                            {{ "%.2f"|format(m.commodity_value) }}
+                        </td>
+
+                        <!-- Building Capital -->
+                        <td class="py-3 px-3 sm:px-4 text-right text-sky-400/90">
+                            {{ "%.2f"|format(m.building_capital) }}
+                        </td>
+
+                        <!-- Total Net Worth -->
+                        <td class="py-3 px-3 sm:px-4 text-right font-bold text-amber-300 text-sm">
+                            {{ "%.2f"|format(m.total_net_worth) }} Taler
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="py-8 text-center text-slate-500 italic font-sans">
+                            Keine Kaufmannsdaten vorhanden.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

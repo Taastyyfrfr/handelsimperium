@@ -1,0 +1,19 @@
+{
+  "name": "Handelsimperium",
+  "short_name": "Imperium",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "description": "Mittelalterliches Browser-Handelsspiel mit atomarem Limit-Orderbuch und Offline-Produktion.",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
