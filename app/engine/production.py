@@ -6,14 +6,36 @@ from app.config import settings, BUILDING_CONFIG, SUPPORTED_RESOURCES, STARTER_C
 
 def ensure_user_entities(cur, user_id: int):
     """Ensures a user has baseline buildings (including warehouse) and starter inventories initialized."""
+    # Look up user's regional multipliers
+    cur.execute(
+        """
+        SELECT r.resource_multipliers 
+        FROM users u 
+        LEFT JOIN regions r ON r.id = u.region_id 
+        WHERE u.id = %s
+        """, 
+        (user_id,)
+    )
+    reg_row = cur.fetchone()
+    multipliers = reg_row["resource_multipliers"] if reg_row and reg_row["resource_multipliers"] else {}
+    if isinstance(multipliers, str):
+        multipliers = json.loads(multipliers)
+
     for b_type, b_info in BUILDING_CONFIG.items():
+        b_res = b_info.get("resource")
+        if b_res:
+            reg_mult = float(multipliers.get(b_res, 1.0))
+            init_rate = round(b_info["base_rate"] * reg_mult, 4) if reg_mult > 0.0 else 0.0
+        else:
+            init_rate = 0.0
+
         cur.execute(
             """
             INSERT INTO buildings (user_id, building_type, level, production_rate)
             VALUES (%s, %s, 1, %s)
             ON CONFLICT (user_id, building_type) DO NOTHING
             """,
-            (user_id, b_type, b_info["base_rate"]),
+            (user_id, b_type, init_rate),
         )
     for res in SUPPORTED_RESOURCES:
         starter_amt = STARTER_CONFIG["inventories"].get(res, 0.0)
@@ -281,7 +303,21 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
     cur.execute("UPDATE users SET last_active_at = %s WHERE id = %s", (now, user_id))
 
     
-    # Format buildings with multi-resource upgrade requirements
+    # Format buildings with multi-resource upgrade requirements and regional specialization
+    cur.execute(
+        """
+        SELECT r.name as region_name, r.tag as region_tag, r.resource_multipliers 
+        FROM users u 
+        LEFT JOIN regions r ON r.id = u.region_id 
+        WHERE u.id = %s
+        """, 
+        (user_id,)
+    )
+    reg_row = cur.fetchone()
+    reg_multipliers = reg_row["resource_multipliers"] if reg_row and reg_row["resource_multipliers"] else {}
+    if isinstance(reg_multipliers, str):
+        reg_multipliers = json.loads(reg_multipliers)
+
     buildings_list = []
     for b_type, b_meta in BUILDING_CONFIG.items():
         b_row = building_rows.get(b_type)
@@ -289,6 +325,9 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
         lvl = b_row["level"] if b_row else 1
         rate = float(b_row["production_rate"]) if b_row else b_meta["base_rate"]
         upgrade_costs = get_upgrade_costs(b_type, lvl)
+        b_res = b_meta.get("resource")
+        reg_mult = float(reg_multipliers.get(b_res, 1.0)) if b_res else 1.0
+        is_import_only = bool(b_res and reg_mult == 0.0)
         
         buildings_list.append({
             "id": b_id,
@@ -298,6 +337,8 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
             "resource": b_meta["resource"],
             "level": lvl,
             "production_rate": round(rate, 4),
+            "region_multiplier": reg_mult,
+            "is_import_only": is_import_only,
             "is_warehouse": b_type == "warehouse",
             "storage_cap": get_effective_storage_cap(cur, user_id, lvl) if b_type == "warehouse" else storage_cap,
             "next_storage_cap": get_effective_storage_cap(cur, user_id, lvl + 1) if b_type == "warehouse" else None,
@@ -356,6 +397,30 @@ def upgrade_building(cur, user_id: int, building_id_or_type: Union[int, str]) ->
     
     if b_type not in BUILDING_CONFIG:
         raise ValueError(f"Unbekannter Gebäudetyp: {b_type}")
+    
+    # Check regional feasibility
+    b_meta = BUILDING_CONFIG[b_type]
+    b_res = b_meta.get("resource")
+    
+    cur.execute(
+        """
+        SELECT r.name as region_name, r.resource_multipliers 
+        FROM users u 
+        LEFT JOIN regions r ON r.id = u.region_id 
+        WHERE u.id = %s
+        """, 
+        (user_id,)
+    )
+    reg_row = cur.fetchone()
+    multipliers = reg_row["resource_multipliers"] if reg_row and reg_row["resource_multipliers"] else {}
+    if isinstance(multipliers, str):
+        multipliers = json.loads(multipliers)
+        
+    region_mult = 1.0
+    if b_res:
+        region_mult = float(multipliers.get(b_res, 1.0))
+        if region_mult == 0.0:
+            raise ValueError("Dieser Rohstoff kann in Eurer Region nicht gewonnen werden.")
     
     # 2. Flush pending offline production before applying upgrade
     calculate_offline_production(cur, user_id)
@@ -419,7 +484,7 @@ def upgrade_building(cur, user_id: int, building_id_or_type: Union[int, str]) ->
         new_cap = get_effective_storage_cap(cur, user_id, new_level)
     else:
         base_rate = BUILDING_CONFIG[b_type]["base_rate"]
-        new_rate = round(base_rate * (1.25 ** (new_level - 1)), 4)
+        new_rate = round(base_rate * (1.25 ** (new_level - 1)) * region_mult, 4) if region_mult > 0.0 else 0.0
         new_cap = None
         
     cur.execute(

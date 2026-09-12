@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from app.auth import get_current_user
+from app.auth import get_current_user, get_user_by_id
 from app.database import get_db_connection
 from app.engine.production import calculate_offline_production, upgrade_building
 import os
@@ -37,8 +37,7 @@ def upgrade_building_by_id(
                 error = str(e)
 
             production_data = calculate_offline_production(cur, user["id"])
-            cur.execute("SELECT id, username, balance FROM users WHERE id = %s", (user["id"],))
-            fresh_user = cur.fetchone()
+            fresh_user = get_user_by_id(cur, user["id"])
             conn.commit()
 
     return templates.TemplateResponse(

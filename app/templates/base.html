@@ -92,6 +92,11 @@
 
                 <!-- User Profile & Logout -->
                 <div class="flex items-center space-x-3 text-sm">
+                    {% if user.region_tag %}
+                    <span class="hidden md:inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30" title="{{ user.region_name }} ({{ user.region_coord_x }}, {{ user.region_coord_y }})">
+                        [{{ user.region_tag }}] {{ user.region_name }}
+                    </span>
+                    {% endif %}
                     <span class="text-slate-400">Kaufmann: <strong class="text-slate-200">{{ user.username }}</strong></span>
                     <a href="/auth/logout" class="px-2.5 py-1 text-xs rounded bg-red-950/60 text-red-400 border border-red-800/40 hover:bg-red-900/50 transition">
                         Abmelden

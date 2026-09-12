@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Request, Response, Form, HTTPException, status, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -61,7 +62,11 @@ def register_page(request: Request):
     user = get_current_user_optional(request)
     if user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-    return templates.TemplateResponse(request=request, name="auth/register.html", context={"error": None})
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name, tag, description, coord_x, coord_y, resource_multipliers FROM regions ORDER BY id ASC")
+            regions = cur.fetchall()
+    return templates.TemplateResponse(request=request, name="auth/register.html", context={"error": None, "regions": regions})
 
 @router.post("/register")
 def register(
@@ -69,51 +74,71 @@ def register(
     username: str = Form(...),
     password: str = Form(...),
     confirm_password: str = Form(...),
+    region_id: Optional[int] = Form(None),
 ):
-    username = username.strip()
-    if len(username) < 3 or len(username) > 32:
-        return templates.TemplateResponse(
-            request=request,
-            name="auth/register.html",
-            context={"error": "Benutzername muss zwischen 3 und 32 Zeichen lang sein."},
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-    if len(password) < 6:
-        return templates.TemplateResponse(
-            request=request,
-            name="auth/register.html",
-            context={"error": "Passwort muss mindestens 6 Zeichen lang sein."},
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-    if password != confirm_password:
-        return templates.TemplateResponse(
-            request=request,
-            name="auth/register.html",
-            context={"error": "Passwörter stimmen nicht überein."},
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-
-    pwd_hash = hash_password(password)
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT id, name, tag, description, coord_x, coord_y, resource_multipliers FROM regions ORDER BY id ASC")
+            regions = cur.fetchall()
+
+            username = username.strip()
+            if region_id is not None:
+                # Validate region exists
+                cur.execute("SELECT id FROM regions WHERE id = %s", (region_id,))
+                if not cur.fetchone():
+                    return templates.TemplateResponse(
+                        request=request,
+                        name="auth/register.html",
+                        context={"error": "Ungültige Heimatregion gewählt.", "regions": regions},
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                    )
+            else:
+                # Default fallback region (Danzig) for legacy callers/fallback
+                cur.execute("SELECT id FROM regions WHERE tag = 'DANZ'")
+                reg_danz = cur.fetchone()
+                region_id = reg_danz["id"] if reg_danz else 1
+
+            if len(username) < 3 or len(username) > 32:
+                return templates.TemplateResponse(
+                    request=request,
+                    name="auth/register.html",
+                    context={"error": "Benutzername muss zwischen 3 und 32 Zeichen lang sein.", "regions": regions},
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+            if len(password) < 6:
+                return templates.TemplateResponse(
+                    request=request,
+                    name="auth/register.html",
+                    context={"error": "Passwort muss mindestens 6 Zeichen lang sein.", "regions": regions},
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+            if password != confirm_password:
+                return templates.TemplateResponse(
+                    request=request,
+                    name="auth/register.html",
+                    context={"error": "Passwörter stimmen nicht überein.", "regions": regions},
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+            pwd_hash = hash_password(password)
             cur.execute("SELECT 1 FROM users WHERE username = %s", (username,))
             if cur.fetchone():
                 return templates.TemplateResponse(
                     request=request,
                     name="auth/register.html",
-                    context={"error": "Dieser Benutzername ist bereits vergeben."},
+                    context={"error": "Dieser Benutzername ist bereits vergeben.", "regions": regions},
                     status_code=status.HTTP_400_BAD_REQUEST,
                 )
             
             cur.execute(
-                "INSERT INTO users (username, password_hash, balance) VALUES (%s, %s, %s) RETURNING id",
-                (username, pwd_hash, STARTER_CONFIG["balance"]),
+                "INSERT INTO users (username, password_hash, balance, region_id) VALUES (%s, %s, %s, %s) RETURNING id",
+                (username, pwd_hash, STARTER_CONFIG["balance"], region_id),
             )
 
             new_user = cur.fetchone()
             user_id = new_user["id"]
             
-            # Initialize starter buildings and starter warehouse inventories
+            # Initialize starter buildings (with regional multipliers) and starter warehouse inventories
             ensure_user_entities(cur, user_id)
             conn.commit()
 

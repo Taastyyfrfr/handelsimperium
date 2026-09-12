@@ -36,17 +36,20 @@
                 <a href="#handbuch-betriebe" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
                     2. Betriebe & Baukosten
                 </a>
+                <a href="#handbuch-regionen" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
+                    3. Hanseatische Regionalmatrix
+                </a>
                 <a href="#handbuch-boerse" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
-                    3. Börse & Orderbuch
+                    4. Börse & Orderbuch
                 </a>
                 <a href="#handbuch-karawanen" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
-                    4. Kaiserliche Karawanen
+                    5. Kaiserliche Karawanen
                 </a>
                 <a href="#handbuch-gilden" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
-                    5. Gilden & Monumente
+                    6. Gilden & Monumente
                 </a>
                 <a href="#handbuch-lehre" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
-                    6. Kaufmannslehre (Quests)
+                    7. Kaufmannslehre (Quests)
                 </a>
             </div>
         </div>
@@ -84,16 +87,19 @@
                     <h3 class="text-base font-bold text-slate-100">2. Betriebe, Werkstätten & Ausbauformeln</h3>
                 </div>
                 <p class="text-xs text-slate-300 leading-relaxed">
-                    Jeder Betrieb benötigt für seinen Ausbau eine ausgewogene Kombination aus Baumaterialien und Taler. Die Kosten wachsen exponentiell um den Faktor <strong>1.5</strong>, während der Ertrag um <strong>1.25</strong> pro Stufe steigt:
+                    Jeder Betrieb benötigt für seinen Ausbau eine ausgewogene Kombination aus Baumaterialien und Taler. Die Kosten wachsen exponentiell um den Faktor <strong>1.5</strong>, während der Ertrag um <strong>1.25</strong> pro Stufe und durch den <strong>Regionalmultiplikator</strong> Eurer Heimatregion skaliert:
                 </p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
                     <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-amber-300">
                         Baukosten(L) = Basiskosten × 1.5^(L - 1)
                     </div>
                     <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-emerald-400">
-                        Ertrag(L) = Basisrate × 1.25^(L - 1)
+                        Ertrag(L) = round(Basisrate × 1.25^(L - 1) × Regionalfaktor, 4)
                     </div>
                 </div>
+                <p class="text-slate-400 text-[11px] italic">
+                    * Hinweis: Besitzt Eure Heimatregion für einen Rohstoff einen Multiplikator von <strong>0.0x</strong>, ist der Betrieb nicht ausbaubar. Die Ware muss als Reine Importware an der Börse erworben werden.
+                </p>
 
                 <div class="overflow-x-auto pt-1">
                     <table class="w-full text-left text-xs">
@@ -123,11 +129,84 @@
                 </div>
             </section>
 
-            <!-- 3. Börse & Orderbuch -->
+            <!-- 3. Hanseatische Regionalmatrix -->
+            <section id="handbuch-regionen" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div class="flex items-center space-x-2">
+                        <span class="p-1 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                            {{ icons.nav("resources", "w-5 h-5") }}
+                        </span>
+                        <h3 class="text-base font-bold text-slate-100">3. Hanseatische Regionalmatrix & Handelsgeographie</h3>
+                    </div>
+                    <span class="text-xs font-mono text-amber-400 font-bold">4 Handelszentren</span>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Die Hanse lebt von Arbeitsteilung und überregionalem Fernhandel. Keine Region ist autark: Die Rohstoffvorkommen sind asymmetrisch verteilt (<span class="text-emerald-400 font-bold">Boni bis +80%</span>, <span class="text-rose-400 font-bold">0.0x Totalausfall / Reine Importware</span>).
+                </p>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs font-mono">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
+                                <th class="py-3 px-3 font-sans">Region</th>
+                                <th class="py-3 px-2 text-center">{{ icons.commodity('wood', 'w-3.5 h-3.5 mx-auto') }} Holz</th>
+                                <th class="py-3 px-2 text-center">{{ icons.commodity('stone', 'w-3.5 h-3.5 mx-auto') }} Stein</th>
+                                <th class="py-3 px-2 text-center">{{ icons.commodity('iron', 'w-3.5 h-3.5 mx-auto') }} Eisen</th>
+                                <th class="py-3 px-2 text-center">{{ icons.commodity('grain', 'w-3.5 h-3.5 mx-auto') }} Getreide</th>
+                                <th class="py-3 px-2 text-center">{{ icons.commodity('cloth', 'w-3.5 h-3.5 mx-auto') }} Tuch</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/60">
+                            {% for r in regions %}
+                            {% set rm = r.resource_multipliers if r.resource_multipliers is mapping else {} %}
+                            <tr class="hover:bg-slate-800/30 transition {% if user and user.region_id == r.id %}bg-amber-950/20{% endif %}">
+                                <td class="py-3 px-3 font-sans">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="px-1.5 py-0.5 rounded font-mono font-bold text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                            [{{ r.tag }}]
+                                        </span>
+                                        <span class="font-bold text-slate-200 text-xs">{{ r.name }}</span>
+                                        {% if user and user.region_id == r.id %}
+                                        <span class="px-1.5 py-0.2 text-[9px] font-bold rounded bg-amber-500 text-slate-950">Eure Region</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="text-[11px] text-slate-400 mt-1 max-w-sm">{{ r.description }}</div>
+                                    <div class="text-[10px] text-slate-500 font-mono mt-0.5">Koord: ({{ r.coord_x }}, {{ r.coord_y }})</div>
+                                </td>
+                                {% for res in ['wood', 'stone', 'iron', 'grain', 'cloth'] %}
+                                {% set m = rm.get(res, 1.0)|float %}
+                                <td class="py-3 px-2 text-center">
+                                    {% if m == 0.0 %}
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/80 text-rose-400 border border-rose-800/50">
+                                        0.0x
+                                    </span>
+                                    {% elif m > 1.0 %}
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800/50">
+                                        +{{ ((m - 1.0) * 100)|round|int }}%
+                                    </span>
+                                    {% elif m < 1.0 %}
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800/50">
+                                        -{{ ((1.0 - m) * 100)|round|int }}%
+                                    </span>
+                                    {% else %}
+                                    <span class="px-2 py-0.5 rounded text-[10px] text-slate-400 bg-slate-900 border border-slate-800">
+                                        1.0x
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 4. Börse & Orderbuch -->
             <section id="handbuch-boerse" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
                 <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
                     {{ icons.nav("market", "w-5 h-5 text-amber-400") }}
-                    <h3 class="text-base font-bold text-slate-100">3. Die Hansebörse: Atomares Orderbuch & Gebühren</h3>
+                    <h3 class="text-base font-bold text-slate-100">4. Die Hansebörse: Atomares Orderbuch & Gebühren</h3>
                 </div>
                 <p class="text-xs text-slate-300 leading-relaxed">
                     Die Börse arbeitet mit einem strikten <strong>Preis-Zeit-Prioritätsalgorithmus</strong> unter datenbankweiten Zeilensperren (`SELECT ... FOR UPDATE`).
@@ -152,11 +231,11 @@
                 </div>
             </section>
 
-            <!-- 4. Karawanen -->
+            <!-- 5. Karawanen -->
             <section id="handbuch-karawanen" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
                 <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
                     {{ icons.nav("contracts", "w-5 h-5 text-amber-400") }}
-                    <h3 class="text-base font-bold text-slate-100">4. Kaiserliche Karawanen (Handelsverträge)</h3>
+                    <h3 class="text-base font-bold text-slate-100">5. Kaiserliche Karawanen (Handelsverträge)</h3>
                 </div>
                 <p class="text-xs text-slate-300 leading-relaxed">
                     Täglich um <strong>00:00 Uhr UTC</strong> treffen 3 neue Handelskarawanen im Kontor ein. Sie garantieren feste Abnahmepreise und schützen Kaufleute vor Marktstagnation:
@@ -167,11 +246,11 @@
                 </div>
             </section>
 
-            <!-- 5. Gilden & Monumente -->
+            <!-- 6. Gilden & Monumente -->
             <section id="handbuch-gilden" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
                 <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
                     {{ icons.nav("guild", "w-5 h-5 text-amber-400") }}
-                    <h3 class="text-base font-bold text-slate-100">5. Kaufmannsgilden & Bündnis-Segen</h3>
+                    <h3 class="text-base font-bold text-slate-100">6. Kaufmannsgilden & Bündnis-Segen</h3>
                 </div>
                 <p class="text-xs text-slate-300 leading-relaxed">
                     Kaufleute können für <span class="font-mono text-amber-400 font-bold">{{ "%.0f"|format(guild_creation_fee) }} Taler</span> eine Gilde gründen oder Allianzen beitreten. Durch gemeinsame Baustoffspenden errichten Gildenmitglieder dauerhafte Weltwunder:
@@ -197,11 +276,11 @@
                 </div>
             </section>
 
-            <!-- 6. Kaufmannslehre -->
+            <!-- 7. Kaufmannslehre -->
             <section id="handbuch-lehre" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
                 <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
                     {{ icons.nav("tutorial", "w-5 h-5 text-amber-400") }}
-                    <h3 class="text-base font-bold text-slate-100">6. Die Kaufmannslehre: Ausbildungsstufen & Prämien</h3>
+                    <h3 class="text-base font-bold text-slate-100">7. Die Kaufmannslehre: Ausbildungsstufen & Prämien</h3>
                 </div>
                 <p class="text-xs text-slate-300 leading-relaxed">
                     Neulinge erhalten bei Absolvierung der 5 Ausbildungsstufen wertvolle Starthilfen und Rohstofflieferungen:

@@ -27,6 +27,24 @@ def decode_session_token(token: str, max_age: int = 86400 * 7) -> Optional[Dict[
     except (BadSignature, SignatureExpired):
         return None
 
+def get_user_by_id(cur, user_id: int) -> Optional[Dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT u.id, u.username, u.balance, u.created_at, u.region_id,
+               r.name AS region_name, r.tag AS region_tag, r.description AS region_description,
+               r.coord_x AS region_coord_x, r.coord_y AS region_coord_y,
+               r.resource_multipliers AS region_multipliers
+        FROM users u
+        LEFT JOIN regions r ON r.id = u.region_id
+        WHERE u.id = %s
+        """,
+        (user_id,),
+    )
+    user = cur.fetchone()
+    if user and user.get("region_multipliers") is None:
+        user["region_multipliers"] = {}
+    return user
+
 def get_current_user_optional(request: Request) -> Optional[Dict[str, Any]]:
     token = request.cookies.get(settings.COOKIE_NAME)
     if not token:
@@ -36,9 +54,7 @@ def get_current_user_optional(request: Request) -> Optional[Dict[str, Any]]:
         return None
     user_id = data.get("user_id")
     with get_db_cursor() as cur:
-        cur.execute("SELECT id, username, balance, created_at FROM users WHERE id = %s", (user_id,))
-        user = cur.fetchone()
-        return user
+        return get_user_by_id(cur, user_id)
 
 def get_current_user(request: Request) -> Dict[str, Any]:
     user = get_current_user_optional(request)

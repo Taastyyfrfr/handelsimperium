@@ -6,7 +6,7 @@ TUTORIAL_STEPS = {
     1: {
         "step_id": 1,
         "title": "1. Bestandsaufnahme im Kontor",
-        "description": "Prüfe Deine aktuellen Rohstoffbestände und mache Dich mit der Lagerkapazität Deines Kontors vertraut.",
+        "description": "Prüfe Deine aktuellen Rohstoffbestände und beachte die Spezialisierung Deiner Heimatregion: Bestimmte Rohstoffe florieren hier mit regionalen Boni, während fehlende Güter (Reine Importware) später über die Börse erworben werden müssen.",
         "requirement_text": "Öffne die Rohstoffübersicht im Kontor.",
         "reward_desc": "25.00 Taler Handgeld",
         "reward": {"balance": 25.0, "resources": {}},
@@ -22,7 +22,7 @@ TUTORIAL_STEPS = {
     3: {
         "step_id": 3,
         "title": "3. Zugang zur Hansebörse",
-        "description": "Handel ist das Lebenselixier des Imperiums: Platziere eine Kauf- oder Verkaufsorder an der Börse.",
+        "description": "Handel ist das Lebenselixier des Imperiums: Keine Region der Hanse ist autark! Verkaufe Deine regionalen Überschüsse an der Börse oder kaufe Mangelwaren ein, die in Deiner Heimat nicht gewonnen werden können.",
         "requirement_text": "Eine Kauf- oder Verkaufsorder im Orderbuch aufgeben.",
         "reward_desc": "25 Holz & 25 Stein",
         "reward": {"balance": 0.0, "resources": {"wood": 25.0, "stone": 25.0}},

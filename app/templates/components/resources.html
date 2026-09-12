@@ -30,31 +30,49 @@
     {% endif %}
 
     <!-- Header Actions & Offline Info -->
-    <div class="flex flex-wrap items-center justify-between bg-slate-900/90 p-5 rounded-2xl border border-slate-800 gap-4 shadow-xl">
-        <div class="space-y-1">
-            <div class="flex items-center space-x-3">
-                <span class="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                    {{ icons.nav("resources", "w-5 h-5") }}
-                </span>
-                <h2 class="text-lg font-black text-amber-400">Lagerhaus & Produktion</h2>
-                {% if storage_cap %}
-                <span class="text-xs px-2.5 py-1 rounded-lg bg-amber-950/70 border border-amber-800/50 text-amber-300 font-mono font-bold">
-                    Lagerkapazität: {{ "%.0f"|format(storage_cap) }} Einheiten (Zentrallager Stufe {{ warehouse_level }})
-                </span>
-                {% endif %}
+    <div class="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="space-y-1">
+                <div class="flex items-center space-x-3">
+                    <span class="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                        {{ icons.nav("resources", "w-5 h-5") }}
+                    </span>
+                    <h2 class="text-lg font-black text-amber-400">Lagerhaus & Produktion</h2>
+                    {% if storage_cap %}
+                    <span class="text-xs px-2.5 py-1 rounded-lg bg-amber-950/70 border border-amber-800/50 text-amber-300 font-mono font-bold">
+                        Lagerkapazität: {{ "%.0f"|format(storage_cap) }} Einheiten (Zentrallager Stufe {{ warehouse_level }})
+                    </span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-slate-300">
+                    Produktionserträge werden on-demand berechnet. Ausbauten verbrauchen Rohstoffe und Taler.
+                </p>
             </div>
-            <p class="text-xs text-slate-300">
-                Produktionserträge werden on-demand berechnet. Ausbauten verbrauchen Rohstoffe und Taler.
-            </p>
+
+            <button hx-get="/resources/overview"
+                    hx-target="#main-panel"
+                    hx-swap="innerHTML"
+                    class="px-4 py-2 text-xs font-bold rounded-xl bg-amber-600/20 text-amber-300 border border-amber-500/30 hover:bg-amber-600/30 transition flex items-center space-x-1.5 cursor-pointer shadow">
+                <span>🔄</span>
+                <span>Ertrag jetzt synchronisieren</span>
+            </button>
         </div>
 
-        <button hx-get="/resources/overview"
-                hx-target="#main-panel"
-                hx-swap="innerHTML"
-                class="px-4 py-2 text-xs font-bold rounded-xl bg-amber-600/20 text-amber-300 border border-amber-500/30 hover:bg-amber-600/30 transition flex items-center space-x-1.5 cursor-pointer shadow">
-            <span>🔄</span>
-            <span>Ertrag jetzt synchronisieren</span>
-        </button>
+        {% if user and user.region_name %}
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/80 text-xs">
+            <div class="flex items-center space-x-2">
+                <span class="text-slate-400">Heimatregion:</span>
+                <span class="px-2 py-0.5 rounded font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    [{{ user.region_tag }}]
+                </span>
+                <strong class="text-slate-200">{{ user.region_name }}</strong>
+                <span class="text-slate-500 font-mono">({{ user.region_coord_x }}, {{ user.region_coord_y }})</span>
+            </div>
+            <div class="text-slate-400 italic text-[11px]">
+                {{ user.region_description }}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Inventory Cards Grid with Detailed Capacity Bars -->
@@ -69,7 +87,11 @@
                         {{ icons.commodity(inv.resource_type, "w-4 h-4 text-amber-400") }}
                         <span>{% if inv.resource_type == 'wood' %}Holz{% elif inv.resource_type == 'stone' %}Stein{% elif inv.resource_type == 'iron' %}Eisen{% elif inv.resource_type == 'grain' %}Getreide{% elif inv.resource_type == 'cloth' %}Tuch{% else %}{{ inv.resource_type }}{% endif %}</span>
                     </span>
+                    {% if inv.production_rate == 0.0 %}
+                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-400 border border-rose-800/50">Reine Importware</span>
+                    {% else %}
                     <span class="text-[11px] font-mono text-emerald-400 font-semibold">+{{ (inv.production_rate * 60)|round(1) }}/m</span>
+                    {% endif %}
                 </div>
 
                 <div class="my-2">
@@ -147,7 +169,18 @@
                             {% if b.is_warehouse %}
                                 <span class="px-2 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/40 text-[10px] font-bold uppercase">Zentrallager</span>
                             {% else %}
-                                <span class="capitalize text-slate-300">{{ b.resource }}</span>
+                                <div class="flex items-center space-x-1.5">
+                                    <span class="capitalize text-slate-300">{% if b.resource == 'wood' %}Holz{% elif b.resource == 'stone' %}Stein{% elif b.resource == 'iron' %}Eisen{% elif b.resource == 'grain' %}Getreide{% elif b.resource == 'cloth' %}Tuch{% else %}{{ b.resource }}{% endif %}</span>
+                                    {% if b.is_import_only %}
+                                        <span class="px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-400 border border-rose-800/50 text-[10px] font-bold font-mono">0.0x Import</span>
+                                    {% elif b.region_multiplier > 1.0 %}
+                                        <span class="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/50 text-[10px] font-bold font-mono">+{{ ((b.region_multiplier - 1.0) * 100)|round|int }}%</span>
+                                    {% elif b.region_multiplier < 1.0 %}
+                                        <span class="px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/50 text-[10px] font-bold font-mono">-{{ ((1.0 - b.region_multiplier) * 100)|round|int }}%</span>
+                                    {% else %}
+                                        <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 text-[10px] font-bold font-mono">1.0x</span>
+                                    {% endif %}
+                                </div>
                             {% endif %}
                         </td>
                         <td class="py-3 px-4 font-bold text-amber-400 whitespace-nowrap">
@@ -157,6 +190,9 @@
                             {% if b.is_warehouse %}
                                 <span class="text-amber-300 font-bold">{{ "%.0f"|format(b.storage_cap) }}</span> <span class="font-sans text-slate-400">Einheiten / Ware</span>
                                 <div class="text-[10px] text-slate-500 font-sans">→ Nächste: {{ "%.0f"|format(b.next_storage_cap) }}</div>
+                            {% elif b.is_import_only %}
+                                <span class="text-rose-400 font-bold font-mono">0.0</span> <span class="font-sans text-slate-400">/ Min</span>
+                                <div class="text-[10px] text-rose-400 font-sans">Kein Vorkommen</div>
                             {% else %}
                                 <span class="text-emerald-400 font-bold">{{ (b.production_rate * 60)|round(1) }}</span> <span class="font-sans text-slate-400">/ Min</span>
                             {% endif %}
@@ -174,15 +210,23 @@
                             </div>
                         </td>
                         <td class="py-3 px-4 text-right whitespace-nowrap font-sans">
-                            <form hx-post="/buildings/{{ b.id or b.building_type }}/upgrade"
-                                  hx-target="#main-panel"
-                                  hx-swap="innerHTML"
-                                  class="inline-block">
-                                <button type="submit"
-                                        class="min-h-[40px] px-3.5 py-1.5 text-xs font-bold rounded-xl transition shadow-md bg-amber-600 hover:bg-amber-500 text-slate-950 cursor-pointer flex items-center space-x-1">
-                                    <span>Ausbauen</span>
+                            {% if b.is_import_only %}
+                                <button disabled
+                                        title="Dieser Rohstoff kann in Eurer Region nicht gewonnen werden."
+                                        class="min-h-[40px] px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-slate-800/50 text-slate-500 border border-slate-800 cursor-not-allowed inline-flex items-center">
+                                    <span>Nicht förderbar</span>
                                 </button>
-                            </form>
+                            {% else %}
+                                <form hx-post="/buildings/{{ b.id or b.building_type }}/upgrade"
+                                      hx-target="#main-panel"
+                                      hx-swap="innerHTML"
+                                      class="inline-block">
+                                    <button type="submit"
+                                            class="min-h-[40px] px-3.5 py-1.5 text-xs font-bold rounded-xl transition shadow-md bg-amber-600 hover:bg-amber-500 text-slate-950 cursor-pointer flex items-center space-x-1">
+                                        <span>Ausbauen</span>
+                                    </button>
+                                </form>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

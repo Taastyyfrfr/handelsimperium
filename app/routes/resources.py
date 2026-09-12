@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Depends, Form, HTTPException, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from app.auth import get_current_user
+from app.auth import get_current_user, get_user_by_id
 from app.database import get_db_connection
 from app.engine.production import calculate_offline_production, upgrade_building, get_latest_catchup, dismiss_catchup
 import os
@@ -56,8 +56,7 @@ def resource_overview(request: Request, user: dict = Depends(get_current_user)):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             production_data = calculate_offline_production(cur, user["id"])
-            cur.execute("SELECT id, username, balance FROM users WHERE id = %s", (user["id"],))
-            fresh_user = cur.fetchone()
+            fresh_user = get_user_by_id(cur, user["id"])
             conn.commit()
 
     return templates.TemplateResponse(
@@ -97,8 +96,7 @@ def upgrade_building_action(
             
             # Recalculate production to display updated stats
             production_data = calculate_offline_production(cur, user["id"])
-            cur.execute("SELECT id, username, balance FROM users WHERE id = %s", (user["id"],))
-            fresh_user = cur.fetchone()
+            fresh_user = get_user_by_id(cur, user["id"])
             conn.commit()
 
     return templates.TemplateResponse(
