@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Request, Response, Form, HTTPException, status
+from fastapi import APIRouter, Request, Response, Form, HTTPException, status, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from app.config import settings
+from app.config import settings, STARTER_CONFIG
 from app.database import get_db_connection
 from app.auth import hash_password, verify_password, create_session_token, get_current_user_optional
 from app.engine.production import ensure_user_entities
+from app.rate_limiter import rate_limit
 import os
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -23,7 +24,9 @@ def login(
     response: Response,
     username: str = Form(...),
     password: str = Form(...),
+    _limiter: bool = Depends(rate_limit(max_requests=5, window_seconds=60, scope="login")),
 ):
+
     username = username.strip()
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -98,9 +101,10 @@ def register(
                 )
             
             cur.execute(
-                "INSERT INTO users (username, password_hash, balance) VALUES (%s, %s, 1000.00) RETURNING id",
-                (username, pwd_hash),
+                "INSERT INTO users (username, password_hash, balance) VALUES (%s, %s, %s) RETURNING id",
+                (username, pwd_hash, STARTER_CONFIG["balance"]),
             )
+
             new_user = cur.fetchone()
             user_id = new_user["id"]
             

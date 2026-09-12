@@ -44,6 +44,39 @@
         {% endfor %}
     </div>
 
+    <!-- Price Discovery Summary Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex items-center justify-between shadow-md">
+            <div>
+                <span class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">Letzter Preis</span>
+                <span class="text-lg font-bold font-mono text-amber-300">
+                    {% if last_price %}{{ "%.2f"|format(last_price) }} Taler{% else %}<span class="text-slate-500 font-sans text-xs italic">Kein Trade</span>{% endif %}
+                </span>
+            </div>
+            <span class="text-2xl">🏷️</span>
+        </div>
+
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex items-center justify-between shadow-md">
+            <div>
+                <span class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">24h-VWAP</span>
+                <span class="text-lg font-bold font-mono text-emerald-400">
+                    {% if vwap_24h %}{{ "%.2f"|format(vwap_24h) }} Taler{% else %}<span class="text-slate-500 font-sans text-xs italic">Keine 24h-Trades</span>{% endif %}
+                </span>
+            </div>
+            <span class="text-2xl">📊</span>
+        </div>
+
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex items-center justify-between shadow-md">
+            <div>
+                <span class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">24h-Volumen</span>
+                <span class="text-lg font-bold font-mono text-slate-200">
+                    {{ "%.0f"|format(volume_24h) }} <span class="text-xs text-slate-400 font-sans">({{ trade_count_24h }} Trades)</span>
+                </span>
+            </div>
+            <span class="text-2xl">📦</span>
+        </div>
+    </div>
+
     <!-- Grid: Order Creation Form + Aggregated Order Book Depth -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Order Placement Form (1 Col) -->
@@ -69,7 +102,7 @@
                     </div>
                 </div>
 
-                <form hx-post="/market/order"
+                <form hx-post="/market/orders"
                       hx-target="#main-panel"
                       hx-swap="innerHTML"
                       class="space-y-4">
@@ -92,15 +125,20 @@
 
                     <!-- Amount -->
                     <div>
-                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Menge (Einheiten)</label>
-                        <input type="number" step="1" min="1" max="10000" name="amount" value="10" required
+                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Menge (Ganze Einheiten)</label>
+                        <input type="number" step="1" min="1" max="100000" name="amount" value="10" required
                                class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 font-mono focus:outline-none focus:border-amber-500 transition">
                     </div>
 
                     <!-- Limit Price -->
                     <div>
-                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Limitpreis pro Einheit (Taler)</label>
-                        <input type="number" step="0.05" min="0.01" max="10000" name="limit_price" value="5.00" required
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">Limitpreis (Taler)</label>
+                            {% if vwap_24h %}
+                            <span class="text-[10px] text-amber-400 font-mono">VWAP: {{ "%.2f"|format(vwap_24h) }}</span>
+                            {% endif %}
+                        </div>
+                        <input type="number" step="0.05" min="0.01" max="1000000" name="limit_price" value="{% if vwap_24h %}{{ vwap_24h }}{% elif last_price %}{{ last_price }}{% else %}5.00{% endif %}" required
                                class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 font-mono focus:outline-none focus:border-amber-500 transition">
                     </div>
 
@@ -115,6 +153,7 @@
                 </form>
             </div>
         </div>
+
 
         <!-- Aggregated Order Book Depth (2 Cols: Asks and Bids) -->
         <div class="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl space-y-6">
@@ -203,8 +242,46 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Recent 10 Executed Trades for this resource -->
+            <div class="border-t border-slate-800 pt-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+                        <span>📜</span>
+                        <span>Letzte 10 Abschlüsse ({{ current_resource|capitalize }})</span>
+                    </h4>
+                    <span class="text-slate-500 text-[10px] font-mono">{{ recent_trades|length }} ausgeführt</span>
+                </div>
+                <div class="bg-slate-950 rounded-lg border border-slate-800/80 overflow-hidden">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-slate-900 border-b border-slate-800 text-slate-400 font-sans">
+                            <tr>
+                                <th class="py-1.5 px-3">Uhrzeit</th>
+                                <th class="py-1.5 px-3 text-right">Menge</th>
+                                <th class="py-1.5 px-3 text-right">Ausführungspreis</th>
+                                <th class="py-1.5 px-3 text-right">Gesamtwert</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/40 font-mono">
+                            {% for t in recent_trades %}
+                            <tr class="hover:bg-slate-900/50 transition">
+                                <td class="py-1.5 px-3 text-slate-500">{{ t.executed_at }}</td>
+                                <td class="py-1.5 px-3 text-right text-slate-200">{{ "%.2f"|format(t.amount) }}</td>
+                                <td class="py-1.5 px-3 text-right font-bold text-amber-300">{{ "%.2f"|format(t.price) }} Taler</td>
+                                <td class="py-1.5 px-3 text-right text-slate-300">{{ "%.2f"|format(t.total_value) }} Taler</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="py-4 text-center text-slate-500 italic font-sans">Noch keine Trades für diese Handelsware</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
+
 
     <!-- Active Orders Management Section -->
     <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl" id="my-active-orders-panel">

@@ -3,8 +3,12 @@
 {% block title %}Kontor - Handelsimperium{% endblock %}
 
 {% block content %}
+<!-- Offline Catchup Modal Container -->
+<div id="catchup-modal-container" hx-get="/resources/catchup" hx-trigger="load" hx-swap="outerHTML"></div>
+
 <div class="space-y-6">
     <!-- Navigation Tabs -->
+
     <div class="flex flex-wrap items-center justify-between border-b border-slate-800 pb-3 gap-4">
         <nav class="flex space-x-2" aria-label="Tabs" id="main-tabs">
             <button id="tab-resources"

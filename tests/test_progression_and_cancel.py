@@ -152,12 +152,16 @@ def test_order_cancellation_zero_leakage(db_conn):
         user_b = cur.fetchone()["id"]
         ensure_user_entities(cur, user_b)
 
-        # 1. User A places BUY order: 20 cloth @ 10.00 Taler = 200.00 escrow
+        # 1. Clear pre-existing cloth orders for isolated cancellation test
+        cur.execute("DELETE FROM market_orders WHERE resource_type = 'cloth'")
+
+        # User A places BUY order: 20 cloth @ 10.00 Taler = 200.00 escrow
         buy_res = place_and_match_order(cur, user_a, "BUY", "cloth", 20.0, 10.0)
         buy_order_id = buy_res["order_id"]
 
         cur.execute("SELECT balance FROM users WHERE id = %s", (user_a,))
         assert float(cur.fetchone()["balance"]) == pytest.approx(300.00, abs=0.01)
+
 
         # User B attempts to cancel User A's order -> PermissionError
         with pytest.raises(PermissionError):
@@ -206,11 +210,15 @@ def test_aggregated_order_book_depth(db_conn):
             ensure_user_entities(cur, tid)
             traders.append(tid)
 
+        # Clean existing grain orders for clean book test
+        cur.execute("DELETE FROM market_orders WHERE resource_type = 'grain'")
+
         # Traders 0, 1, and 2 all place BUY orders for Grain at limit price 4.50
         # Quantities: 10, 25, 15 -> Total Volume = 50.00 at price 4.50
         place_and_match_order(cur, traders[0], "BUY", "grain", 10.0, 4.50)
         place_and_match_order(cur, traders[1], "BUY", "grain", 25.0, 4.50)
         place_and_match_order(cur, traders[2], "BUY", "grain", 15.0, 4.50)
+
 
         # Trader 0 also places a higher BUY order: 5.0 units @ 6.00 Taler
         place_and_match_order(cur, traders[0], "BUY", "grain", 5.0, 6.00)

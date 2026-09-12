@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Dict, List, Any, Union
-from app.config import settings, BUILDING_CONFIG, SUPPORTED_RESOURCES
+from typing import Dict, List, Any, Union, Optional
+import json
+from app.config import settings, BUILDING_CONFIG, SUPPORTED_RESOURCES, STARTER_CONFIG
 
 def ensure_user_entities(cur, user_id: int):
-    """Ensures a user has baseline buildings (including warehouse) and inventories initialized."""
+    """Ensures a user has baseline buildings (including warehouse) and starter inventories initialized."""
     for b_type, b_info in BUILDING_CONFIG.items():
         cur.execute(
             """
@@ -15,13 +16,14 @@ def ensure_user_entities(cur, user_id: int):
             (user_id, b_type, b_info["base_rate"]),
         )
     for res in SUPPORTED_RESOURCES:
+        starter_amt = STARTER_CONFIG["inventories"].get(res, 0.0)
         cur.execute(
             """
             INSERT INTO inventories (user_id, resource_type, amount, last_calculated_at)
-            VALUES (%s, %s, 100.00, NOW())
+            VALUES (%s, %s, %s, NOW())
             ON CONFLICT (user_id, resource_type) DO NOTHING
             """,
-            (user_id, res),
+            (user_id, res, starter_amt),
         )
 
 def get_storage_cap(warehouse_level: int) -> float:
@@ -39,14 +41,58 @@ def get_upgrade_costs(building_type: str, current_level: int) -> Dict[str, float
         costs[item] = round(base_val * scaling_factor, 2)
     return costs
 
-def calculate_offline_production(cur, user_id: int) -> Dict[str, Any]:
+def get_latest_catchup(cur, user_id: int) -> Optional[Dict[str, Any]]:
+    """Retrieves the latest unacknowledged offline catchup event for a merchant."""
+    cur.execute(
+        """
+        SELECT id, offline_seconds, production_delta, trade_delta, created_at
+        FROM user_catchups
+        WHERE user_id = %s AND dismissed = FALSE
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (user_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "offline_seconds": float(row["offline_seconds"]),
+        "production_delta": row["production_delta"] if isinstance(row["production_delta"], dict) else json.loads(row["production_delta"]),
+        "trade_delta": row["trade_delta"] if isinstance(row["trade_delta"], dict) else json.loads(row["trade_delta"]),
+        "created_at": row["created_at"],
+    }
+
+def dismiss_catchup(cur, user_id: int, catchup_id: Optional[int] = None):
+    """Marks catchup records as dismissed for the given merchant."""
+    if catchup_id:
+        cur.execute(
+            "UPDATE user_catchups SET dismissed = TRUE WHERE id = %s AND user_id = %s",
+            (catchup_id, user_id),
+        )
+    else:
+        cur.execute(
+            "UPDATE user_catchups SET dismissed = TRUE WHERE user_id = %s AND dismissed = FALSE",
+            (user_id,),
+        )
+
+def calculate_offline_production(cur, user_id: int, record_catchup: bool = True) -> Dict[str, Any]:
     """
     Calculates offline resource generation strictly on-demand using timestamp deltas.
-    Uses the user's warehouse level to determine global storage cap.
-    Updates inventories atomically in PostgreSQL with storage cap enforcement.
+    Tracks production gains, storage cap losses, and trades executed during merchant absence.
+    Updates inventories and user timestamps atomically within PostgreSQL.
     """
     ensure_user_entities(cur, user_id)
     
+    # Check user's last activity timestamp
+    cur.execute("SELECT last_active_at FROM users WHERE id = %s FOR UPDATE", (user_id,))
+    u_row = cur.fetchone()
+    now = datetime.now(timezone.utc)
+    last_active = u_row["last_active_at"] if u_row and u_row["last_active_at"] else now
+    if last_active.tzinfo is None:
+        last_active = last_active.replace(tzinfo=timezone.utc)
+
     # Lock inventories for this user to ensure atomic delta calculation
     cur.execute(
         """
@@ -75,8 +121,10 @@ def calculate_offline_production(cur, user_id: int) -> Dict[str, Any]:
     warehouse_level = warehouse_info["level"] if warehouse_info else 1
     storage_cap = get_storage_cap(warehouse_level)
     
-    now = datetime.now(timezone.utc)
     updated_inventories = []
+    production_delta_map = {}
+    max_delta_seconds = 0.0
+    min_last_calc = now
     
     # Map resource to its producing building
     res_to_building = {info["resource"]: b_type for b_type, info in BUILDING_CONFIG.items() if info["resource"]}
@@ -95,10 +143,29 @@ def calculate_offline_production(cur, user_id: int) -> Dict[str, Any]:
         if last_calc.tzinfo is None:
             last_calc = last_calc.replace(tzinfo=timezone.utc)
         
+        if last_calc < min_last_calc:
+            min_last_calc = last_calc
+            
         delta_seconds = max(0.0, (now - last_calc).total_seconds())
+        if delta_seconds > max_delta_seconds:
+            max_delta_seconds = delta_seconds
+            
         generated = delta_seconds * rate
         current_amount = float(inv["amount"])
-        new_amount = min(storage_cap, current_amount + generated)
+        uncapped_amount = current_amount + generated
+        new_amount = min(storage_cap, uncapped_amount)
+        lost_due_to_cap = max(0.0, uncapped_amount - storage_cap)
+        net_added = new_amount - current_amount
+        
+        # Record delta details for catch-up summary
+        production_delta_map[res] = {
+            "produced": round(generated, 2),
+            "lost": round(lost_due_to_cap, 2),
+            "net_added": round(net_added, 2),
+            "final_amount": round(new_amount, 2),
+            "storage_cap": storage_cap,
+            "rate_per_minute": round(rate * 60, 2),
+        }
         
         # Write back updated amount and new timestamp
         cur.execute(
@@ -117,8 +184,89 @@ def calculate_offline_production(cur, user_id: int) -> Dict[str, Any]:
             "production_rate": rate,
             "delta_seconds": round(delta_seconds, 1),
             "generated": round(generated, 2),
+            "lost": round(lost_due_to_cap, 2),
             "last_calculated_at": now,
         })
+
+    # Query trades executed during merchant absence
+    cur.execute(
+        """
+        SELECT 
+            t.id, t.resource_type, t.amount, t.price, t.fee, t.executed_at,
+            t.buyer_id, t.seller_id
+        FROM trades t
+        WHERE (t.buyer_id = %s OR t.seller_id = %s)
+          AND t.executed_at >= %s
+        ORDER BY t.executed_at ASC
+        """,
+        (user_id, user_id, min_last_calc),
+    )
+    trade_rows = cur.fetchall()
+    
+    buys_summary = []
+    sells_summary = []
+    total_spent = 0.0
+    total_earned = 0.0
+    
+    for tr in trade_rows:
+        t_amt = float(tr["amount"])
+        t_price = float(tr["price"])
+        t_fee = float(tr["fee"])
+        val = round(t_amt * t_price, 2)
+        
+        if tr["buyer_id"] == user_id:
+            total_spent += val
+            buys_summary.append({
+                "trade_id": tr["id"],
+                "resource": tr["resource_type"],
+                "amount": t_amt,
+                "price": t_price,
+                "total_taler": val,
+            })
+        if tr["seller_id"] == user_id:
+            net_rev = round(val - t_fee, 2)
+            total_earned += net_rev
+            sells_summary.append({
+                "trade_id": tr["id"],
+                "resource": tr["resource_type"],
+                "amount": t_amt,
+                "price": t_price,
+                "fee": t_fee,
+                "net_taler": net_rev,
+            })
+            
+    trade_delta_map = {
+        "buys": buys_summary,
+        "sells": sells_summary,
+        "total_spent": round(total_spent, 2),
+        "total_earned": round(total_earned, 2),
+        "total_trade_count": len(trade_rows),
+    }
+    
+    total_produced_all = sum(v["produced"] for v in production_delta_map.values())
+    total_lost_all = sum(v["lost"] for v in production_delta_map.values())
+    
+    # Persist catchup event if significant time elapsed or trades took place
+    if record_catchup and (max_delta_seconds >= 10.0 or len(trade_rows) > 0):
+        if total_produced_all > 0.01 or len(trade_rows) > 0:
+            # Mark previous undismissed catchups as superseded
+            cur.execute("UPDATE user_catchups SET dismissed = TRUE WHERE user_id = %s", (user_id,))
+            cur.execute(
+                """
+                INSERT INTO user_catchups (user_id, offline_seconds, production_delta, trade_delta, dismissed)
+                VALUES (%s, %s, %s, %s, FALSE)
+                """,
+                (
+                    user_id,
+                    round(max_delta_seconds, 1),
+                    json.dumps(production_delta_map),
+                    json.dumps(trade_delta_map),
+                ),
+            )
+            
+    # Update user's last_active_at
+    cur.execute("UPDATE users SET last_active_at = %s WHERE id = %s", (now, user_id))
+
     
     # Format buildings with multi-resource upgrade requirements
     buildings_list = []
@@ -148,7 +296,15 @@ def calculate_offline_production(cur, user_id: int) -> Dict[str, Any]:
         "buildings": buildings_list,
         "storage_cap": storage_cap,
         "warehouse_level": warehouse_level,
+        "catchup": {
+            "offline_seconds": round(max_delta_seconds, 1),
+            "production": production_delta_map,
+            "trades": trade_delta_map,
+            "total_produced": round(total_produced_all, 2),
+            "total_lost": round(total_lost_all, 2),
+        },
     }
+
 
 def upgrade_building(cur, user_id: int, building_id_or_type: Union[int, str]) -> Dict[str, Any]:
     """

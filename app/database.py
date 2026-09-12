@@ -13,10 +13,22 @@ pool = ConnectionPool(
 )
 
 def init_pool():
-    pool.open()
+    global pool
+    if pool._closed and pool._opened:
+        pool = ConnectionPool(
+            conninfo=settings.conn_str,
+            min_size=2,
+            max_size=20,
+            kwargs={"row_factory": dict_row},
+            open=True,
+        )
+    elif not pool._opened:
+        pool.open()
 
 def close_pool():
-    pool.close()
+    if pool._opened and not pool._closed:
+        pool.close()
+
 
 @contextmanager
 def get_db_connection():

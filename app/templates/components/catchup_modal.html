@@ -1,0 +1,96 @@
+<!-- Catch-Up Modal: While You Were Away -->
+<div id="catchup-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-amber-500/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2">
+                <span class="text-2xl">⏳</span>
+                <div>
+                    <h3 class="text-lg font-bold text-amber-400">Während Deiner Abwesenheit...</h3>
+                    <p class="text-xs text-slate-400">
+                        Dein Kontor war für 
+                        <strong class="text-slate-200">
+                            {% if catchup.offline_seconds >= 3600 %}
+                                {{ "%.1f"|format(catchup.offline_seconds / 3600) }} Stunden
+                            {% elif catchup.offline_seconds >= 60 %}
+                                {{ (catchup.offline_seconds / 60)|int }} Minuten
+                            {% else %}
+                                {{ catchup.offline_seconds|int }} Sekunden
+                            {% endif %}
+                        </strong> 
+                        ohne Aufsicht aktiv.
+                    </p>
+                </div>
+            </div>
+            <button hx-post="/resources/catchup/dismiss"
+                    hx-target="#catchup-modal"
+                    hx-swap="outerHTML"
+                    class="text-slate-400 hover:text-slate-200 text-xl font-bold p-1">&times;</button>
+        </div>
+
+        <!-- Production Gains & Losses -->
+        <div class="space-y-2">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center justify-between">
+                <span>🌾 Erwirtschaftete Rohstoffe</span>
+            </h4>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {% for res, data in catchup.production_delta.items() %}
+                <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80 flex flex-col justify-between">
+                    <div class="flex items-center justify-between">
+                        <span class="capitalize font-semibold text-slate-300">
+                            {% if res == 'wood' %}🪵 Holz
+                            {% elif res == 'stone' %}🪨 Stein
+                            {% elif res == 'iron' %}⛓️ Eisen
+                            {% elif res == 'grain' %}🌾 Getreide
+                            {% elif res == 'cloth' %}🧵 Tuch
+                            {% else %}{{ res }}{% endif %}
+                        </span>
+                        <span class="font-mono font-bold text-emerald-400">+{{ "%.1f"|format(data.produced) }}</span>
+                    </div>
+                    {% if data.lost > 0 %}
+                    <div class="mt-1 text-[11px] text-amber-400 flex items-center justify-between bg-amber-950/30 px-1.5 py-0.5 rounded border border-amber-800/40">
+                        <span>⚠️ Lagerlimit erreicht:</span>
+                        <span class="font-mono font-bold text-red-400">-{{ "%.1f"|format(data.lost) }} verloren</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Trades Executed in Absence -->
+        {% if catchup.trade_delta.total_trade_count > 0 %}
+        <div class="space-y-2 border-t border-slate-800 pt-3">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center justify-between">
+                <span>⚖️ Börsenabschlüsse in Abwesenheit</span>
+                <span class="text-amber-400 text-xs font-mono">{{ catchup.trade_delta.total_trade_count }} Trades</span>
+            </h4>
+            
+            <div class="bg-slate-950 p-3 rounded-lg border border-slate-800/80 text-xs space-y-1.5 font-mono">
+                {% if catchup.trade_delta.sells %}
+                <div class="flex justify-between items-center text-emerald-300">
+                    <span>Erlöse aus Verkäufen (netto):</span>
+                    <span class="font-bold">+{{ "%.2f"|format(catchup.trade_delta.total_earned) }} Taler</span>
+                </div>
+                {% endif %}
+                {% if catchup.trade_delta.buys %}
+                <div class="flex justify-between items-center text-amber-300">
+                    <span>Aufgewendet für Käufe:</span>
+                    <span class="font-bold">-{{ "%.2f"|format(catchup.trade_delta.total_spent) }} Taler</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Dismiss Button -->
+        <div class="pt-2">
+            <button hx-post="/resources/catchup/dismiss"
+                    hx-target="#catchup-modal"
+                    hx-swap="outerHTML"
+                    class="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-lg shadow-lg hover:shadow-amber-600/30 transition text-sm">
+                Verstanden & Zum Kontor
+            </button>
+        </div>
+    </div>
+</div>

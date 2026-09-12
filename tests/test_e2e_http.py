@@ -3,11 +3,15 @@ import httpx
 
 BASE_URL = "http://localhost:80"
 
-def test_full_http_htmx_flow():
+def test_full_http_htmx_flow(db_conn):
     import time
+    with db_conn.cursor() as cur:
+        cur.execute("DELETE FROM market_orders WHERE resource_type = 'wood'")
+
     ts = int(time.time() * 1000)
     user_a = f"kaufmann_a_{ts}"
     user_b = f"kaufmann_b_{ts}"
+
 
     with httpx.Client(base_url=BASE_URL, follow_redirects=True) as client_a:
         # 1. Register User A
@@ -36,12 +40,12 @@ def test_full_http_htmx_flow():
         assert book_res.status_code == 200
         assert "Orderbuch" in book_res.text
 
-        # 5. Place BUY order (10 wood @ 5.00 Taler)
+        # 5. Place BUY order (10 wood @ 2.50 Taler)
         order_buy = client_a.post("/market/order", data={
             "order_type": "BUY",
             "resource_type": "wood",
             "amount": 10.0,
-            "limit_price": 5.0,
+            "limit_price": 2.50,
         })
         assert order_buy.status_code == 200
         assert "erfolgreich im Orderbuch platziert" in order_buy.text or "ausgeführt" in order_buy.text
@@ -55,14 +59,15 @@ def test_full_http_htmx_flow():
         })
         assert reg_b.status_code == 200
 
-        # User B places SELL order (10 wood @ 5.00 Taler)
+        # User B places SELL order (10 wood @ 2.50 Taler)
         order_sell = client_b.post("/market/order", data={
             "order_type": "SELL",
             "resource_type": "wood",
             "amount": 10.0,
-            "limit_price": 5.0,
+            "limit_price": 2.50,
         })
         assert order_sell.status_code == 200
+
         assert "sofort vollständig ausgeführt" in order_sell.text or "Order #" in order_sell.text
 
         # 6. Check Transaction Log

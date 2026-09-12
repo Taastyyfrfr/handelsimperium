@@ -14,12 +14,26 @@ class Settings(BaseSettings):
     
     MARKET_FEE_RATE: float = 0.02  # 2% market fee
     BASE_STORAGE_CAP: float = 1000.0  # Base storage capacity per resource for Level 1 warehouse
+    RATE_LIMIT_ENABLED: bool = True
 
     @property
     def conn_str(self) -> str:
         return f"host={self.DB_HOST} port={self.DB_PORT} user={self.DB_USER} password={self.DB_PASS} dbname={self.DB_NAME}"
 
 settings = Settings()
+
+# Starter package for new players
+STARTER_CONFIG = {
+    "balance": 200.00,
+    "inventories": {
+        "wood": 50.00,
+        "stone": 50.00,
+        "iron": 10.00,
+        "grain": 10.00,
+        "cloth": 10.00,
+    },
+}
+
 
 # Default building definitions with multi-resource upgrade requirements
 BUILDING_CONFIG = {

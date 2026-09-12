@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Request, Depends, Form, HTTPException, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
 from app.auth import get_current_user
 from app.database import get_db_connection
 from app.config import SUPPORTED_RESOURCES
+from app.models import OrderCreate
+from app.rate_limiter import rate_limit
 from app.engine.matching import place_and_match_order, cancel_order, get_order_book
 from app.engine.production import calculate_offline_production
 import os
@@ -42,11 +45,17 @@ def market_book_view(
             "bids": book_data["bids"],
             "asks": book_data["asks"],
             "my_orders": book_data["my_orders"],
+            "last_price": book_data.get("last_price"),
+            "vwap_24h": book_data.get("vwap_24h"),
+            "volume_24h": book_data.get("volume_24h"),
+            "trade_count_24h": book_data.get("trade_count_24h"),
+            "recent_trades": book_data.get("recent_trades", []),
             "message": None,
             "error": None,
         },
     )
 
+@router.post("/orders", response_class=HTMLResponse)
 @router.post("/order", response_class=HTMLResponse)
 def create_market_order(
     request: Request,
@@ -55,34 +64,52 @@ def create_market_order(
     amount: float = Form(...),
     limit_price: float = Form(...),
     user: dict = Depends(get_current_user),
+    _limiter: bool = Depends(rate_limit(max_requests=15, window_seconds=10, scope="market_order")),
 ):
     message = None
     error = None
+
+    # Strict input validation via Pydantic schema
+    try:
+        validated_order = OrderCreate(
+            order_type=order_type,
+            resource_type=resource_type,
+            amount=int(amount) if float(amount).is_integer() else -1,
+            limit_price=limit_price,
+        )
+    except ValidationError as ve:
+        err_msg = "; ".join([f"{err['loc'][0]}: {err['msg']}" for err in ve.errors()])
+        error = f"Eingabefehler: {err_msg}"
+        validated_order = None
+    except Exception as e:
+        error = f"Ungültige Eingabe: {str(e)}"
+        validated_order = None
 
     if resource_type not in SUPPORTED_RESOURCES:
         resource_type = "wood"
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            try:
-                res = place_and_match_order(
-                    cur,
-                    user_id=user["id"],
-                    order_type=order_type,
-                    resource_type=resource_type,
-                    amount=amount,
-                    limit_price=limit_price,
-                )
-                conn.commit()
-                if res["filled_amount"] >= res["initial_amount"]:
-                    message = f"Order #{res['order_id']} ({order_type} {res['initial_amount']} {resource_type} @ {limit_price}) sofort vollständig ausgeführt!"
-                elif res["filled_amount"] > 0:
-                    message = f"Order #{res['order_id']} teilweise ausgeführt ({res['filled_amount']}/{res['initial_amount']}). Rest aktiv im Orderbuch."
-                else:
-                    message = f"Order #{res['order_id']} ({order_type} {res['initial_amount']} {resource_type} @ {limit_price}) erfolgreich im Orderbuch platziert."
-            except ValueError as e:
-                conn.rollback()
-                error = str(e)
+            if validated_order:
+                try:
+                    res = place_and_match_order(
+                        cur,
+                        user_id=user["id"],
+                        order_type=validated_order.order_type,
+                        resource_type=validated_order.resource_type,
+                        amount=validated_order.amount,
+                        limit_price=validated_order.limit_price,
+                    )
+                    conn.commit()
+                    if res["filled_amount"] >= res["initial_amount"]:
+                        message = f"Order #{res['order_id']} ({order_type} {res['initial_amount']} {resource_type} @ {limit_price}) sofort vollständig ausgeführt!"
+                    elif res["filled_amount"] > 0:
+                        message = f"Order #{res['order_id']} teilweise ausgeführt ({res['filled_amount']}/{res['initial_amount']}). Rest aktiv im Orderbuch."
+                    else:
+                        message = f"Order #{res['order_id']} ({order_type} {res['initial_amount']} {resource_type} @ {limit_price}) erfolgreich im Orderbuch platziert."
+                except ValueError as e:
+                    conn.rollback()
+                    error = str(e)
             
             # Fetch fresh state for rendering
             calculate_offline_production(cur, user["id"])
@@ -104,10 +131,16 @@ def create_market_order(
             "bids": book_data["bids"],
             "asks": book_data["asks"],
             "my_orders": book_data["my_orders"],
+            "last_price": book_data.get("last_price"),
+            "vwap_24h": book_data.get("vwap_24h"),
+            "volume_24h": book_data.get("volume_24h"),
+            "trade_count_24h": book_data.get("trade_count_24h"),
+            "recent_trades": book_data.get("recent_trades", []),
             "message": message,
             "error": error,
         },
     )
+
 
 @router.post("/orders/{order_id}/cancel", response_class=HTMLResponse)
 @router.post("/cancel", response_class=HTMLResponse)
@@ -164,7 +197,13 @@ def cancel_market_order(
             "bids": book_data["bids"],
             "asks": book_data["asks"],
             "my_orders": book_data["my_orders"],
+            "last_price": book_data.get("last_price"),
+            "vwap_24h": book_data.get("vwap_24h"),
+            "volume_24h": book_data.get("volume_24h"),
+            "trade_count_24h": book_data.get("trade_count_24h"),
+            "recent_trades": book_data.get("recent_trades", []),
             "message": message,
             "error": error,
         },
     )
+

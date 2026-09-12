@@ -19,13 +19,20 @@ def place_and_match_order(
     if order_type not in ("BUY", "SELL"):
         raise ValueError("Order-Typ muss BUY oder SELL sein.")
     
-    amount = round(float(amount), 2)
+    try:
+        amt_float = float(amount)
+        if not amt_float.is_integer() or amt_float < 1:
+            raise ValueError("Menge muss eine positive ganze Zahl ab 1 sein.")
+        amount = int(amt_float)
+    except (ValueError, TypeError) as e:
+        raise ValueError("Menge muss eine positive ganze Zahl ab 1 sein.")
+
     limit_price = round(float(limit_price), 2)
-    
-    if amount <= 0:
-        raise ValueError("Menge muss größer als 0 sein.")
     if limit_price <= 0:
         raise ValueError("Limit-Preis muss größer als 0 sein.")
+    if limit_price > 1_000_000.0:
+        raise ValueError("Limit-Preis darf maximal 1.000.000,00 Taler betragen.")
+
 
     # Always ensure user has fresh production calculated before placing order
     calculate_offline_production(cur, user_id)
@@ -324,10 +331,83 @@ def cancel_order(cur, user_id: int, order_id: int) -> Dict[str, Any]:
         "refunded_funds": refunded_gold,
     }
 
+def get_market_statistics(cur, resource_type: str) -> Dict[str, Any]:
+    """
+    Computes market metrics for price discovery:
+    - Last traded price
+    - 24-hour Volume-Weighted Average Price (VWAP)
+    - 24-hour total traded volume
+    - Recent 10 executed trades
+    """
+    # 1. Last traded execution price
+    cur.execute(
+        """
+        SELECT price, executed_at
+        FROM trades
+        WHERE resource_type = %s
+        ORDER BY executed_at DESC
+        LIMIT 1
+        """,
+        (resource_type,),
+    )
+    last_trade = cur.fetchone()
+    last_price = float(last_trade["price"]) if last_trade else None
+
+    # 2. 24h VWAP and Volume
+    cur.execute(
+        """
+        SELECT 
+            COALESCE(SUM(price * amount) / NULLIF(SUM(amount), 0), 0) AS vwap,
+            COALESCE(SUM(amount), 0) AS volume_24h,
+            COUNT(*) AS trade_count_24h
+        FROM trades
+        WHERE resource_type = %s AND executed_at >= NOW() - INTERVAL '24 HOURS'
+        """,
+        (resource_type,),
+    )
+    stat_row = cur.fetchone()
+    vwap_val = float(stat_row["vwap"]) if stat_row else 0.0
+    vol_24h = float(stat_row["volume_24h"]) if stat_row else 0.0
+    trade_count_24h = int(stat_row["trade_count_24h"]) if stat_row else 0
+
+    # 3. Last 10 executed trades for this resource
+    cur.execute(
+        """
+        SELECT id, amount, price, fee, executed_at, buyer_id, seller_id
+        FROM trades
+        WHERE resource_type = %s
+        ORDER BY executed_at DESC
+        LIMIT 10
+        """,
+        (resource_type,),
+    )
+    raw_recent = cur.fetchall()
+    recent_trades = []
+    for r in raw_recent:
+        r_amt = float(r["amount"])
+        r_price = float(r["price"])
+        recent_trades.append({
+            "id": r["id"],
+            "amount": r_amt,
+            "price": r_price,
+            "fee": float(r["fee"]),
+            "total_value": round(r_amt * r_price, 2),
+            "executed_at": r["executed_at"].strftime("%H:%M:%S") if r["executed_at"] else "",
+        })
+
+    return {
+        "last_price": last_price,
+        "vwap_24h": round(vwap_val, 2) if vwap_val > 0 else None,
+        "volume_24h": round(vol_24h, 2),
+        "trade_count_24h": trade_count_24h,
+        "recent_trades": recent_trades,
+    }
+
 def get_order_book(cur, resource_type: str, current_user_id: int) -> Dict[str, Any]:
     """
     Fetches aggregated order book depth ladder for bids and asks,
-    combining multiple orders at the same limit price into total volume.
+    combining multiple orders at the same limit price into total volume,
+    plus 24h VWAP, Last Price, and recent trades.
     """
     # 1. Aggregated Bids (highest price first)
     cur.execute(
@@ -417,9 +497,18 @@ def get_order_book(cur, resource_type: str, current_user_id: int) -> Dict[str, A
             "created_at": r["created_at"],
         })
 
+    # 4. Market discovery stats (VWAP, Last Price, Recent Trades)
+    stats = get_market_statistics(cur, resource_type)
+
     return {
         "resource_type": resource_type,
         "bids": bids,
         "asks": asks,
         "my_orders": my_orders,
+        "last_price": stats["last_price"],
+        "vwap_24h": stats["vwap_24h"],
+        "volume_24h": stats["volume_24h"],
+        "trade_count_24h": stats["trade_count_24h"],
+        "recent_trades": stats["recent_trades"],
     }
+

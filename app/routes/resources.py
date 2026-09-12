@@ -3,11 +3,49 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from app.auth import get_current_user
 from app.database import get_db_connection
-from app.engine.production import calculate_offline_production, upgrade_building
+from app.engine.production import calculate_offline_production, upgrade_building, get_latest_catchup, dismiss_catchup
 import os
 
 router = APIRouter(prefix="/resources", tags=["resources"])
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "../templates"))
+
+@router.get("/catchup", response_class=HTMLResponse)
+def get_catchup_modal(request: Request, user: dict = Depends(get_current_user)):
+    """
+    Evaluates whether an unacknowledged offline catch-up event exists.
+    Returns the catch-up modal partial if available, otherwise returns empty response.
+    """
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            catchup = get_latest_catchup(cur, user["id"])
+
+    if not catchup:
+        return HTMLResponse(content="", status_code=status.HTTP_200_OK)
+
+    # Only show if there was noticeable offline time (>= 10s) or trades took place
+    has_trades = catchup.get("trade_delta", {}).get("total_trade_count", 0) > 0
+    has_time = catchup.get("offline_seconds", 0) >= 10.0
+
+    if not (has_trades or has_time):
+        return HTMLResponse(content="", status_code=status.HTTP_200_OK)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="components/catchup_modal.html",
+        context={"user": user, "catchup": catchup},
+    )
+
+@router.post("/catchup/dismiss", response_class=HTMLResponse)
+def dismiss_catchup_modal(user: dict = Depends(get_current_user)):
+    """
+    Dismisses the offline catch-up modal for the current session.
+    """
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            dismiss_catchup(cur, user["id"])
+            conn.commit()
+    return HTMLResponse(content="", status_code=status.HTTP_200_OK)
+
 
 @router.get("/overview", response_class=HTMLResponse)
 def resource_overview(request: Request, user: dict = Depends(get_current_user)):
