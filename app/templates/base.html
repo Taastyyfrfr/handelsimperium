@@ -64,6 +64,28 @@
                     </span>
                 </div>
 
+                <!-- Notification Bell & Dropdown Container -->
+                <div class="relative" id="notifications-menu">
+                    <button class="min-h-[40px] px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 relative transition cursor-pointer flex items-center justify-center"
+                            hx-get="/notifications"
+                            hx-target="#notifications-dropdown"
+                            hx-swap="innerHTML"
+                            onclick="document.getElementById('notifications-dropdown').classList.toggle('hidden')">
+                        <span class="text-base">🔔</span>
+                        <!-- Dynamic badge -->
+                        <span id="unread-notification-badge"
+                              hx-get="/notifications/badge"
+                              hx-trigger="load, every 30s"
+                              hx-swap="outerHTML"></span>
+                    </button>
+
+                    <!-- Dropdown Panel -->
+                    <div id="notifications-dropdown"
+                         class="hidden absolute right-0 mt-2 w-80 sm:w-96 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                        <div class="p-4 text-center text-slate-500 text-xs">Lade Berichte...</div>
+                    </div>
+                </div>
+
                 <!-- User Profile & Logout -->
                 <div class="flex items-center space-x-3 text-sm">
                     <span class="text-slate-400">Kaufmann: <strong class="text-slate-200">{{ user.username }}</strong></span>
@@ -86,7 +108,7 @@
         Handelsimperium &copy; 2026 &bull; Offline-Produktion &bull; Atomares Orderbuch (2% Marktgebühr)
     </footer>
 
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration & UI Listeners -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -97,6 +119,15 @@
                 });
             });
         }
+
+        // Close notification dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('notifications-menu');
+            const dropdown = document.getElementById('notifications-dropdown');
+            if (menu && dropdown && !menu.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
     </script>
 </body>
 </html>

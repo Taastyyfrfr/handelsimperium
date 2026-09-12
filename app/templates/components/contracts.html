@@ -1,0 +1,151 @@
+<!-- Handelskarawanen (Export Contracts) HTMX Partial -->
+<div class="space-y-6">
+    <!-- Out of band update for user balance in navbar -->
+    {% if user %}
+    <span id="user-balance-badge" hx-swap-oob="true" class="font-mono text-amber-300 font-bold">
+        {{ "%.2f"|format(user.balance) }}
+    </span>
+    {% endif %}
+
+    <!-- Alert / Messages -->
+    {% if message %}
+    <div class="p-4 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 text-sm flex items-center justify-between shadow-lg">
+        <span class="flex items-center space-x-2">
+            <span>✨</span>
+            <span>{{ message }}</span>
+        </span>
+        <button onclick="this.parentElement.remove()" class="text-emerald-500 hover:text-emerald-300 font-bold">&times;</button>
+    </div>
+    {% endif %}
+    {% if error %}
+    <div class="p-4 rounded-xl bg-red-950/60 border border-red-800/60 text-red-300 text-sm flex items-center justify-between shadow-lg">
+        <span class="flex items-center space-x-2">
+            <span>⚠️</span>
+            <span>{{ error }}</span>
+        </span>
+        <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-300 font-bold">&times;</button>
+    </div>
+    {% endif %}
+
+    <!-- Banner Header -->
+    <div class="bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-900 border border-amber-500/30 rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="space-y-1">
+            <div class="flex items-center space-x-2">
+                <span class="text-2xl">🐫</span>
+                <h2 class="text-xl font-black text-amber-400">Kaiserliche Handelskarawanen</h2>
+            </div>
+            <p class="text-xs text-slate-300 max-w-2xl">
+                Täglich eintreffende Karawanen kaufen feste Rohstoffkontingente zu garantierten Mindestpreisen auf. 
+                Gelieferte Waren werden dem Markt dauerhaft entzogen und schützen Deine Bestände vor Preisverfall.
+            </p>
+        </div>
+
+        <div class="bg-slate-950/90 border border-amber-500/40 px-4 py-3 rounded-xl text-right shrink-0">
+            <span class="text-[10px] uppercase font-bold text-amber-400 block tracking-wider">Abreise der Karawane</span>
+            <span class="text-xl font-mono font-black text-slate-100 flex items-center justify-end space-x-1.5 mt-0.5">
+                <span>⏳</span>
+                <span>{{ countdown_str }}</span>
+            </span>
+            <span class="text-[10px] text-slate-500 block mt-0.5">Täglich um 00:00 UTC</span>
+        </div>
+    </div>
+
+    <!-- 3 Daily Contracts Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {% for c in contracts %}
+        <div class="bg-slate-900/90 border {% if c.status == 'FULFILLED' %}border-emerald-700/50 bg-emerald-950/10{% else %}border-slate-800{% endif %} rounded-2xl p-6 shadow-xl flex flex-col justify-between relative overflow-hidden">
+            <!-- Commodity Type Banner -->
+            <div>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full 
+                        {% if c.status == 'FULFILLED' %}
+                            bg-emerald-950/80 text-emerald-300 border border-emerald-700/50
+                        {% elif c.can_fulfill %}
+                            bg-amber-950/80 text-amber-300 border border-amber-600/50
+                        {% else %}
+                            bg-slate-800 text-slate-400 border border-slate-700
+                        {% endif %}">
+                        {% if c.status == 'FULFILLED' %}
+                            Erfüllt & Beliefert
+                        {% elif c.can_fulfill %}
+                            Lieferbereit
+                        {% else %}
+                            Nicht genügend Ware
+                        {% endif %}
+                    </span>
+                    <span class="text-2xl">
+                        {% if c.resource_type == 'wood' %}🪵
+                        {% elif c.resource_type == 'stone' %}🪨
+                        {% elif c.resource_type == 'iron' %}⛓️
+                        {% elif c.resource_type == 'grain' %}🌾
+                        {% elif c.resource_type == 'cloth' %}🧵
+                        {% else %}📦{% endif %}
+                    </span>
+                </div>
+
+                <h3 class="text-base font-bold text-slate-100 mb-1">{{ c.title }}</h3>
+                <p class="text-xs text-slate-400 mb-4">
+                    Garantierte Vergütung durch den kaiserlichen Schatzmeister.
+                </p>
+
+                <!-- Target & Payout Stats -->
+                <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-2 mb-4 text-xs">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400">Benötigte Menge:</span>
+                        <span class="font-mono text-slate-200 font-bold">
+                            {{ "%.0f"|format(c.target_amount) }} {{ c.resource_type }}
+                        </span>
+                    </div>
+
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400">Im Lager vorhanden:</span>
+                        <span class="font-mono font-bold {% if c.available_inventory >= c.target_amount %}text-emerald-400{% else %}text-amber-400{% endif %}">
+                            {{ "%.2f"|format(c.available_inventory) }}
+                        </span>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                        <div class="{% if c.available_inventory >= c.target_amount %}bg-emerald-500{% else %}bg-amber-500{% endif %} h-1.5 rounded-full transition-all duration-500"
+                             style="width: {{ c.progress_pct }}%"></div>
+                    </div>
+
+                    <div class="flex justify-between items-center pt-2 border-t border-slate-800/80">
+                        <span class="text-slate-400">Garantierter Erlös:</span>
+                        <span class="font-mono text-amber-300 font-bold text-sm">
+                            🪙 {{ "%.2f"|format(c.reward_taler) }} Taler
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fulfillment Button -->
+            <div>
+                {% if c.status == 'FULFILLED' %}
+                <button disabled
+                        class="w-full min-h-[44px] py-2.5 px-4 bg-emerald-950/60 border border-emerald-800/50 text-emerald-400 font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 cursor-not-allowed">
+                    <span>✅</span>
+                    <span>Auftrag bereits beliefert</span>
+                </button>
+                {% elif c.can_fulfill %}
+                <form hx-post="/market/contracts/{{ c.id }}/fulfill"
+                      hx-target="#main-panel"
+                      hx-swap="innerHTML">
+                    <button type="submit"
+                            class="w-full min-h-[44px] py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-xl shadow-lg hover:shadow-emerald-600/30 transition text-xs flex items-center justify-center space-x-1.5 cursor-pointer">
+                        <span>🐫</span>
+                        <span>Waren liefern & {{ "%.2f"|format(c.reward_taler) }} Taler erhalten</span>
+                    </button>
+                </form>
+                {% else %}
+                <button disabled
+                        class="w-full min-h-[44px] py-2.5 px-4 bg-slate-800/60 border border-slate-700/50 text-slate-500 font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 cursor-not-allowed">
+                    <span>⏳</span>
+                    <span>Noch nicht genügend Waren im Lager</span>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>

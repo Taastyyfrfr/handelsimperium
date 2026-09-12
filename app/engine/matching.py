@@ -2,6 +2,7 @@ from decimal import Decimal
 from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.engine.production import calculate_offline_production
+from app.engine.notifications import create_notification
 
 def place_and_match_order(
     cur,
@@ -169,6 +170,39 @@ def place_and_match_order(
                 "fee": fee,
             })
 
+            # Dispatch trade notifications
+            create_notification(
+                cur,
+                user_id=user_id,
+                event_type="TRADE_EXECUTED",
+                payload={
+                    "role": "BUYER",
+                    "trade_id": trade_rec["id"],
+                    "resource_type": resource_type,
+                    "amount": trade_qty,
+                    "price": exec_price,
+                    "total_value": trade_value,
+                    "fee": 0.0,
+                    "counterparty_id": seller_id,
+                },
+            )
+            create_notification(
+                cur,
+                user_id=seller_id,
+                event_type="TRADE_EXECUTED",
+                payload={
+                    "role": "SELLER",
+                    "trade_id": trade_rec["id"],
+                    "resource_type": resource_type,
+                    "amount": trade_qty,
+                    "price": exec_price,
+                    "total_value": trade_value,
+                    "payout": seller_payout,
+                    "fee": fee,
+                    "counterparty_id": user_id,
+                },
+            )
+
     else:  # SELL order matching against BUY orders
         # Match against BUY orders: highest price first, then oldest
         cur.execute(
@@ -249,6 +283,39 @@ def place_and_match_order(
                 "price": exec_price,
                 "fee": fee,
             })
+
+            # Dispatch trade notifications
+            create_notification(
+                cur,
+                user_id=buyer_id,
+                event_type="TRADE_EXECUTED",
+                payload={
+                    "role": "BUYER",
+                    "trade_id": trade_rec["id"],
+                    "resource_type": resource_type,
+                    "amount": trade_qty,
+                    "price": exec_price,
+                    "total_value": trade_value,
+                    "fee": 0.0,
+                    "counterparty_id": user_id,
+                },
+            )
+            create_notification(
+                cur,
+                user_id=user_id,
+                event_type="TRADE_EXECUTED",
+                payload={
+                    "role": "SELLER",
+                    "trade_id": trade_rec["id"],
+                    "resource_type": resource_type,
+                    "amount": trade_qty,
+                    "price": exec_price,
+                    "total_value": trade_value,
+                    "payout": seller_payout,
+                    "fee": fee,
+                    "counterparty_id": buyer_id,
+                },
+            )
 
     # 4. Final status for the newly placed order
     final_status = "FILLED" if filled_amount >= amount else "ACTIVE"

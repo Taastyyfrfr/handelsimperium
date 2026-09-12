@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     CSRF_ENABLED: bool = True
     CSRF_COOKIE_NAME: str = "imperium_csrf"
 
+    ADMIN_USER: str = os.getenv("ADMIN_USER", "admin")
+    ADMIN_PASS: str = os.getenv("ADMIN_PASS", "imperium_admin_2026")
+
     @property
     def conn_str(self) -> str:
         return f"host={self.DB_HOST} port={self.DB_PORT} user={self.DB_USER} password={self.DB_PASS} dbname={self.DB_NAME}"
@@ -31,6 +34,15 @@ REFERENCE_PRICES = {
     "iron": 12.00,
     "grain": 3.00,
     "cloth": 8.00,
+}
+
+# Daily Export Contract Templates ("Handelskarawanen" Price Floor & Commodity Sink)
+CONTRACT_TEMPLATES = {
+    "wood": {"amount": 25.0, "reward": 110.00, "title": "Bauholz für die Flotte", "desc": "Die kaiserliche Kriegsmarine benötigt geschlagenes Nutzholz zum Ausbau der Flotte."},
+    "stone": {"amount": 20.0, "reward": 110.00, "title": "Bruchstein für Festungsmauern", "desc": "Der Rat der Hanse verstärkt die äußeren Wallanlagen gegen Überfälle."},
+    "iron": {"amount": 10.0, "reward": 132.00, "title": "Waffenfähiges Eisen", "desc": "Waffenschmiede der königlichen Garde suchen reines Schmiedeeisen."},
+    "grain": {"amount": 35.0, "reward": 115.50, "title": "Korn für kaiserliche Vorratslager", "desc": "Zur Sicherung der Nahrungsmittelversorgung der Städte vor dem Winter."},
+    "cloth": {"amount": 15.0, "reward": 132.00, "title": "Segeltuch für Fernhandelsschiffe", "desc": "Gewebtes Tuch für neue Hansekoggen auf der Ostseeroute."},
 }
 
 # Starter package for new players

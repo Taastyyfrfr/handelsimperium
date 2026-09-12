@@ -1,0 +1,101 @@
+<!-- Notifications Partial (Dropdown Content) -->
+<div>
+    <!-- Out of band update for header notification badge -->
+    <span id="unread-notification-badge" hx-swap-oob="true"
+          class="{% if unread_count > 0 %}absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse{% else %}hidden{% endif %}">
+        {{ unread_count }}
+    </span>
+
+    <!-- Dropdown Header -->
+    <div class="flex items-center justify-between p-3 border-b border-slate-800 bg-slate-900/90 rounded-t-xl">
+        <div class="flex items-center space-x-2">
+            <span class="text-base">🔔</span>
+            <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wider">Handelsberichte</h4>
+        </div>
+        {% if unread_count > 0 %}
+        <button hx-post="/notifications/read-all"
+                hx-target="#notifications-dropdown"
+                hx-swap="innerHTML"
+                class="text-[11px] text-amber-400 hover:text-amber-300 font-semibold cursor-pointer">
+            Alle gelesen
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- Notifications List -->
+    <div class="max-h-80 overflow-y-auto divide-y divide-slate-800/60 font-sans text-xs">
+        {% for n in notifications %}
+        <div class="p-3 hover:bg-slate-800/50 transition {% if not n.is_read %}bg-amber-950/20 border-l-2 border-amber-500{% endif %}">
+            {% if n.event_type == 'TRADE_EXECUTED' %}
+                {% if n.payload.role == 'BUYER' %}
+                    <div class="flex items-start space-x-2.5">
+                        <span class="text-lg">🟢</span>
+                        <div class="flex-1">
+                            <div class="font-bold text-emerald-400">Kaufauftrag ausgeführt</div>
+                            <div class="text-slate-300 mt-0.5">
+                                <strong>{{ "%.2f"|format(n.payload.amount) }} {{ n.payload.resource_type }}</strong> gekauft zu je 
+                                <strong class="font-mono">{{ "%.2f"|format(n.payload.price) }} Taler</strong>.
+                            </div>
+                            <div class="text-[10px] text-slate-500 mt-1 flex justify-between">
+                                <span>Gesamtwert: {{ "%.2f"|format(n.payload.total_value) }} Taler</span>
+                                <span>{{ n.created_at.strftime('%H:%M:%S') }}</span>
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="flex items-start space-x-2.5">
+                        <span class="text-lg">🪙</span>
+                        <div class="flex-1">
+                            <div class="font-bold text-amber-400">Verkaufsauftrag ausgeführt</div>
+                            <div class="text-slate-300 mt-0.5">
+                                <strong>{{ "%.2f"|format(n.payload.amount) }} {{ n.payload.resource_type }}</strong> verkauft. Netto-Auszahlung: 
+                                <strong class="font-mono text-emerald-400">+{{ "%.2f"|format(n.payload.payout) }} Taler</strong>
+                                <span class="text-[10px] text-slate-500">(2% Gebühr: {{ "%.2f"|format(n.payload.fee) }})</span>
+                            </div>
+                            <div class="text-[10px] text-slate-500 mt-1 text-right">
+                                <span>{{ n.created_at.strftime('%H:%M:%S') }}</span>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            {% elif n.event_type == 'CONTRACT_FULFILLED' %}
+                <div class="flex items-start space-x-2.5">
+                    <span class="text-lg">📜</span>
+                    <div class="flex-1">
+                        <div class="font-bold text-sky-400">Karawanen-Export erfüllt</div>
+                        <div class="text-slate-300 mt-0.5">
+                            <strong>{{ "%.2f"|format(n.payload.amount) }} {{ n.payload.resource_type }}</strong> exportiert. Vergütung: 
+                            <strong class="font-mono text-amber-300">+{{ "%.2f"|format(n.payload.reward) }} Taler</strong>
+                        </div>
+                        <div class="text-[10px] text-slate-500 mt-1 text-right">
+                            <span>{{ n.created_at.strftime('%H:%M:%S') }}</span>
+                        </div>
+                    </div>
+                </div>
+            {% elif n.event_type == 'STORAGE_OVERFLOW' %}
+                <div class="flex items-start space-x-2.5">
+                    <span class="text-lg">⚠️</span>
+                    <div class="flex-1">
+                        <div class="font-bold text-red-400">Lagerkapazität erschöpft</div>
+                        <div class="text-slate-300 mt-0.5">
+                            {{ "%.2f"|format(n.payload.lost_amount) }} {{ n.payload.resource_type }} konnten nicht eingelagert werden.
+                        </div>
+                        <div class="text-[10px] text-slate-500 mt-1 text-right">
+                            <span>{{ n.created_at.strftime('%H:%M:%S') }}</span>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="text-slate-400">
+                    <div>{{ n.event_type }}</div>
+                    <div class="text-[10px] text-slate-500">{{ n.created_at.strftime('%H:%M:%S') }}</div>
+                </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-slate-500 italic">
+            Keine neuen Handelsberichte vorhanden.
+        </div>
+        {% endfor %}
+    </div>
+</div>
