@@ -1,4 +1,6 @@
-<!-- Market Order Book Component (HTMX Partial) -->
+{% import "components/icons.html" as icons %}
+
+<!-- Financial Terminal: Dual-Column Market & Order Book -->
 <div class="space-y-6">
     <!-- Out of band update for user balance in navbar -->
     {% if user %}
@@ -9,95 +11,74 @@
 
     <!-- Alert / Messages -->
     {% if message %}
-    <div class="p-4 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 text-sm flex items-center justify-between">
-        <span>✨ {{ message }}</span>
-        <button onclick="this.parentElement.remove()" class="text-emerald-500 hover:text-emerald-300">&times;</button>
+    <div class="p-4 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 text-sm flex items-center justify-between shadow-lg">
+        <span class="flex items-center space-x-2">
+            {{ icons.nav("check", "w-4 h-4 text-emerald-400") }}
+            <span>{{ message }}</span>
+        </span>
+        <button onclick="this.parentElement.remove()" class="text-emerald-500 hover:text-emerald-300 font-bold">&times;</button>
     </div>
     {% endif %}
     {% if error %}
-    <div class="p-4 rounded-xl bg-red-950/60 border border-red-800/60 text-red-300 text-sm flex items-center justify-between">
-        <span>⚠️ {{ error }}</span>
-        <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-300">&times;</button>
+    <div class="p-4 rounded-xl bg-red-950/60 border border-red-800/60 text-red-300 text-sm flex items-center justify-between shadow-lg">
+        <span class="flex items-center space-x-2">
+            <span class="text-red-400 font-bold text-base">!</span>
+            <span>{{ error }}</span>
+        </span>
+        <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-300 font-bold">&times;</button>
     </div>
     {% endif %}
 
-    <!-- Resource Selection Navigation -->
+    <!-- Commodity Selection Bar -->
     <div class="flex items-center space-x-2 overflow-x-auto pb-2 border-b border-slate-800">
-        <span class="text-xs font-semibold uppercase text-slate-400 mr-2">Ware wählen:</span>
+        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-2 shrink-0">Handelsware:</span>
         {% for r in resources %}
         <button hx-get="/market/book?resource={{ r }}"
                 hx-target="#main-panel"
                 hx-swap="innerHTML"
-                class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition uppercase tracking-wider
+                class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 shrink-0 cursor-pointer
                 {% if r == current_resource %}
-                    bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20
+                    bg-amber-600 text-slate-950 shadow-md shadow-amber-600/30
                 {% else %}
-                    bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200
+                    bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-slate-800
                 {% endif %}">
-            {% if r == 'wood' %}🪵 Holz
-            {% elif r == 'stone' %}🪨 Stein
-            {% elif r == 'iron' %}⛓️ Eisen
-            {% elif r == 'grain' %}🌾 Getreide
-            {% elif r == 'cloth' %}🧵 Tuch
-            {% else %}{{ r }}{% endif %}
+            {{ icons.commodity(r, "w-3.5 h-3.5 " ~ ('text-slate-950' if r == current_resource else 'text-amber-400')) }}
+            <span class="capitalize">{% if r == 'wood' %}Holz{% elif r == 'stone' %}Stein{% elif r == 'iron' %}Eisen{% elif r == 'grain' %}Getreide{% elif r == 'cloth' %}Tuch{% else %}{{ r }}{% endif %}</span>
         </button>
         {% endfor %}
     </div>
 
-    <!-- Price Discovery Summary Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex items-center justify-between shadow-md">
-            <div>
-                <span class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">Letzter Preis</span>
-                <span class="text-lg font-bold font-mono text-amber-300">
-                    {% if last_price %}{{ "%.2f"|format(last_price) }} Taler{% else %}<span class="text-slate-500 font-sans text-xs italic">Kein Trade</span>{% endif %}
-                </span>
-            </div>
-            <span class="text-2xl">🏷️</span>
-        </div>
+    <!-- Dual-Column Financial Terminal Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <!-- LEFT COLUMN: Order Entry & Key Metrics (5 Cols) -->
+        <div class="lg:col-span-5 space-y-6">
+            <!-- Order Entry Card -->
+            <div class="bg-slate-900/95 border border-slate-800 rounded-2xl p-6 shadow-xl" id="order-placement-card">
+                <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
+                    <div>
+                        <h3 class="text-base font-black text-slate-100 flex items-center space-x-2">
+                            {{ icons.nav("market", "w-4 h-4 text-amber-400") }}
+                            <span>Order aufgeben: <span class="text-amber-400 capitalize">{% if current_resource == 'wood' %}Holz{% elif current_resource == 'stone' %}Stein{% elif current_resource == 'iron' %}Eisen{% elif current_resource == 'grain' %}Getreide{% elif current_resource == 'cloth' %}Tuch{% else %}{{ current_resource }}{% endif %}</span></span>
+                        </h3>
+                        <p class="text-[11px] text-slate-400 mt-0.5">Preispriorität & atomare Treuhand</p>
+                    </div>
+                    <span class="text-xs px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800 font-mono">2% Gebühr</span>
+                </div>
 
-        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex items-center justify-between shadow-md">
-            <div>
-                <span class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">24h-VWAP</span>
-                <span class="text-lg font-bold font-mono text-emerald-400">
-                    {% if vwap_24h %}{{ "%.2f"|format(vwap_24h) }} Taler{% else %}<span class="text-slate-500 font-sans text-xs italic">Keine 24h-Trades</span>{% endif %}
-                </span>
-            </div>
-            <span class="text-2xl">📊</span>
-        </div>
-
-        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex items-center justify-between shadow-md">
-            <div>
-                <span class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">24h-Volumen</span>
-                <span class="text-lg font-bold font-mono text-slate-200">
-                    {{ "%.0f"|format(volume_24h) }} <span class="text-xs text-slate-400 font-sans">({{ trade_count_24h }} Trades)</span>
-                </span>
-            </div>
-            <span class="text-2xl">📦</span>
-        </div>
-    </div>
-
-    <!-- Grid: Order Creation Form + Aggregated Order Book Depth -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Order Placement Form (1 Col) -->
-        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col justify-between" id="order-placement-card">
-            <div>
-                <h3 class="text-md font-bold text-amber-400 mb-1 flex items-center space-x-2">
-                    <span>✍️</span>
-                    <span>Order aufgeben</span>
-                </h3>
-                <p class="text-xs text-slate-400 mb-4">
-                    Atomares Matching mit 2% Börsengebühr auf ausgeführte Trades.
-                </p>
-
-                <!-- Current Balance / Inventory Context -->
-                <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs mb-4 space-y-1">
-                    <div class="flex justify-between">
-                        <span class="text-slate-400">Verfügbare Taler:</span>
+                <!-- Account Balances Context -->
+                <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs mb-5 space-y-1.5 shadow-inner">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400 flex items-center space-x-1.5">
+                            {{ icons.commodity("taler", "w-3.5 h-3.5 text-amber-400") }}
+                            <span>Verfügbare Taler:</span>
+                        </span>
                         <span class="font-mono text-amber-300 font-bold" id="form-user-balance">{{ "%.2f"|format(user.balance) }}</span>
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-slate-400">Im Lager ({{ current_resource }}):</span>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400 flex items-center space-x-1.5">
+                            {{ icons.commodity(current_resource, "w-3.5 h-3.5 text-amber-400") }}
+                            <span>Im Kontorlager:</span>
+                        </span>
                         <span class="font-mono text-slate-200 font-bold" id="form-user-inventory">{{ "%.2f"|format(user_inventory) }}</span>
                     </div>
                 </div>
@@ -110,183 +91,220 @@
 
                     <!-- BUY / SELL Switch -->
                     <div>
-                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Ordertyp</label>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Handelsrichtung</label>
                         <div class="grid grid-cols-2 gap-2">
-                            <label class="min-h-[44px] flex items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-950 cursor-pointer has-[:checked]:bg-emerald-600/30 has-[:checked]:border-emerald-500 has-[:checked]:text-emerald-300 transition select-none">
+                            <label class="min-h-[44px] flex items-center justify-center p-2 rounded-xl border border-slate-800 bg-slate-950 cursor-pointer has-[:checked]:bg-emerald-600/20 has-[:checked]:border-emerald-500 has-[:checked]:text-emerald-300 transition select-none">
                                 <input type="radio" name="order_type" id="order-type-buy" value="BUY" checked class="hidden">
-                                <span class="text-xs font-bold uppercase">Kauf (BUY)</span>
+                                <span class="text-xs font-bold uppercase tracking-wider">Kauf (BUY)</span>
                             </label>
-                            <label class="min-h-[44px] flex items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-950 cursor-pointer has-[:checked]:bg-red-600/30 has-[:checked]:border-red-500 has-[:checked]:text-red-300 transition select-none">
+                            <label class="min-h-[44px] flex items-center justify-center p-2 rounded-xl border border-slate-800 bg-slate-950 cursor-pointer has-[:checked]:bg-red-600/20 has-[:checked]:border-red-500 has-[:checked]:text-red-300 transition select-none">
                                 <input type="radio" name="order_type" id="order-type-sell" value="SELL" class="hidden">
-                                <span class="text-xs font-bold uppercase">Verkauf (SELL)</span>
+                                <span class="text-xs font-bold uppercase tracking-wider">Verkauf (SELL)</span>
                             </label>
                         </div>
                     </div>
 
-                    <!-- Amount -->
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Menge (Ganze Einheiten)</label>
-                        <input type="number" step="1" min="1" max="100000" name="amount" id="order-amount-input" value="10" required
-                               class="w-full min-h-[44px] px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 font-mono focus:outline-none focus:border-amber-500 transition">
-                    </div>
-
-                    <!-- Limit Price -->
+                    <!-- Amount Input -->
                     <div>
                         <div class="flex justify-between items-center mb-1">
-                            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">Limitpreis (Taler)</label>
+                            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Menge (Ganze Einheiten)</label>
+                            <span class="text-[10px] text-slate-500 font-mono">Min. 1</span>
+                        </div>
+                        <input type="number" step="1" min="1" max="100000" name="amount" id="order-amount-input" value="10" required
+                               class="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-slate-100 font-mono text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition">
+                    </div>
+
+                    <!-- Limit Price Input -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Limitpreis je Einheit</label>
                             {% if vwap_24h %}
                             <span class="text-[10px] text-amber-400 font-mono">VWAP: {{ "%.2f"|format(vwap_24h) }}</span>
                             {% endif %}
                         </div>
                         <input type="number" step="0.05" min="0.01" max="1000000" name="limit_price" id="order-limit-price-input" value="{% if vwap_24h %}{{ vwap_24h }}{% elif last_price %}{{ last_price }}{% else %}5.00{% endif %}" required
-                               class="w-full min-h-[44px] px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 font-mono focus:outline-none focus:border-amber-500 transition">
+                               class="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-slate-100 font-mono text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition">
                     </div>
 
-                    <div class="text-[11px] text-slate-500 italic">
-                        * Bei Kauf wird Treuhandguthaben reserviert. Bei Verkauf werden Rohstoffe im Lager gesperrt.
-                    </div>
+                    <p class="text-[11px] text-slate-500 leading-relaxed italic">
+                        * Bei Kauf wird Treuhandguthaben reserviert. Bei Verkauf werden Rohstoffe im Lager gebunden.
+                    </p>
 
                     <button type="submit"
-                            class="w-full min-h-[44px] py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-lg shadow-lg hover:shadow-amber-600/30 transition flex items-center justify-center">
-                        Order einstellen
+                            class="w-full min-h-[44px] py-3 px-4 bg-amber-600 hover:bg-amber-500 text-slate-950 font-black rounded-xl shadow-lg hover:shadow-amber-600/30 transition flex items-center justify-center space-x-2 cursor-pointer text-sm">
+                        {{ icons.nav("market", "w-4 h-4") }}
+                        <span>Order verbindlich einstellen</span>
                     </button>
                 </form>
+            </div>
+
+            <!-- Market Metrics Card -->
+            <div class="bg-slate-900/95 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+                <span class="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Börsen-Indikatoren (24h)</span>
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+                        <span class="text-[10px] text-slate-400 block uppercase">Letzter Preis</span>
+                        <span class="text-sm font-black font-mono text-amber-300 mt-0.5 block">
+                            {% if last_price %}{{ "%.2f"|format(last_price) }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+
+                    <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+                        <span class="text-[10px] text-slate-400 block uppercase">24h-VWAP</span>
+                        <span class="text-sm font-black font-mono text-emerald-400 mt-0.5 block">
+                            {% if vwap_24h %}{{ "%.2f"|format(vwap_24h) }}{% else %}—{% endif %}
+                        </span>
+                    </div>
+
+                    <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+                        <span class="text-[10px] text-slate-400 block uppercase">24h-Volumen</span>
+                        <span class="text-sm font-black font-mono text-slate-200 mt-0.5 block">
+                            {{ "%.0f"|format(volume_24h) }}
+                        </span>
+                    </div>
+                </div>
             </div>
         </div>
 
 
-        <!-- Aggregated Order Book Depth (2 Cols: Asks and Bids) -->
-        <div class="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl space-y-6">
-            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div>
-                    <h3 class="text-md font-bold text-slate-200 flex items-center space-x-2">
-                        <span>📖</span>
-                        <span>Orderbuch & Aggregierte Markttiefe: <span class="text-amber-400 capitalize">{{ current_resource }}</span></span>
-                    </h3>
-                    <p class="text-[11px] text-slate-500 mt-0.5">Volumen kombiniert nach Preisstufen (Preispriorität)</p>
+        <!-- RIGHT COLUMN: Aggregated Depth Ladder & Recent Tape (7 Cols) -->
+        <div class="lg:col-span-7 space-y-6">
+            <!-- Aggregated Order Book Depth -->
+            <div class="bg-slate-900/95 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div class="flex items-center space-x-2">
+                        {{ icons.nav("market", "w-5 h-5 text-amber-400") }}
+                        <div>
+                            <h3 class="text-base font-bold text-slate-100">Aggregiertes Orderbuch</h3>
+                            <span class="text-[11px] text-slate-400">Preispriorität mit Schnellübernahme per Mausklick</span>
+                        </div>
+                    </div>
+                    <button hx-get="/market/book?resource={{ current_resource }}"
+                            hx-target="#main-panel"
+                            hx-swap="innerHTML"
+                            class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center space-x-1 cursor-pointer">
+                        <span>Aktualisieren</span>
+                    </button>
                 </div>
-                <button hx-get="/market/book?resource={{ current_resource }}"
-                        hx-target="#main-panel"
-                        hx-swap="innerHTML"
-                        class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
-                    🔄 Aktualisieren
-                </button>
-            </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Bids (Kaufgebote - Aggregiert) -->
-                <div>
-                    <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 flex items-center justify-between">
-                        <span>🟢 Kaufgebote (Bids)</span>
-                        <span class="text-slate-500 text-[10px]">{{ bids|length }} Preisstufen</span>
-                    </h4>
-                    <div class="bg-slate-950 rounded-lg border border-slate-800/80 overflow-hidden">
-                        <table class="w-full text-xs text-left">
-                            <thead class="bg-slate-900 border-b border-slate-800 text-slate-400 font-sans">
-                                <tr>
-                                    <th class="py-2 px-3">Preis</th>
-                                    <th class="py-2 px-3 text-right">Volumen</th>
-                                    <th class="py-2 px-3 text-right">Orders</th>
-                                    <th class="py-2 px-3 text-right">Kumuliert</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-800/40 font-mono">
-                                {% for b in bids %}
-                                <tr onclick="quickFillOrder('SELL', {{ b.limit_price }}, {{ b.total_amount }})"
-                                    class="hover:bg-slate-800/80 cursor-pointer transition select-none {% if b.has_own %}bg-amber-950/20 text-amber-300 border-l-2 border-amber-500{% endif %}"
-                                    title="⚡ Klick: Limitpreis & Verkaufsmenge sofort ins Formular übernehmen">
-                                    <td class="py-2 px-3 font-bold text-emerald-400">
-                                        <div class="flex items-center justify-between">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <!-- Bids (Kaufgebote) -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center text-xs font-bold text-emerald-400">
+                            <span class="flex items-center space-x-1">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                <span>Kaufgebote (Bids)</span>
+                            </span>
+                            <span class="text-slate-500 font-mono text-[10px]">{{ bids|length }} Stufen</span>
+                        </div>
+
+                        <div class="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden">
+                            <table class="w-full text-xs text-left">
+                                <thead class="bg-slate-900 border-b border-slate-800 text-slate-400 text-[10px] uppercase font-sans">
+                                    <tr>
+                                        <th class="py-2 px-3">Preis</th>
+                                        <th class="py-2 px-3 text-right">Menge</th>
+                                        <th class="py-2 px-3 text-right">Orders</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800/40 font-mono">
+                                    {% for b in bids %}
+                                    <tr onclick="quickFillOrder('SELL', {{ b.limit_price }}, {{ b.total_amount }})"
+                                        class="hover:bg-slate-800/80 cursor-pointer transition select-none {% if b.has_own %}bg-amber-950/20 text-amber-300 border-l-2 border-amber-500{% endif %}"
+                                        title="⚡ Klick: Limitpreis & Verkaufsmenge sofort ins Formular übernehmen">
+                                        <td class="py-2 px-3 font-bold text-emerald-400 flex items-center justify-between">
                                             <span>{{ "%.2f"|format(b.limit_price) }}</span>
-                                            <span class="text-[10px] text-amber-400/70 ml-1">⚡</span>
-                                        </div>
-                                    </td>
-                                    <td class="py-2 px-3 text-right text-slate-200">{{ "%.2f"|format(b.total_amount) }}</td>
-                                    <td class="py-2 px-3 text-right text-[11px] text-slate-400">{{ b.order_count }}</td>
-                                    <td class="py-2 px-3 text-right text-slate-400 text-[11px]">{{ "%.2f"|format(b.cumulative_amount) }}</td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="4" class="py-6 text-center text-slate-500 italic font-sans">Keine Kaufgebote aktiv</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                                            <span class="text-[10px] text-amber-400/80 opacity-0 hover:opacity-100">{{ icons.nav("bolt", "w-3 h-3 inline") }}</span>
+                                        </td>
+                                        <td class="py-2 px-3 text-right text-slate-200">{{ "%.1f"|format(b.total_amount) }}</td>
+                                        <td class="py-2 px-3 text-right text-slate-400 text-[11px]">{{ b.order_count }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="3" class="py-6 text-center text-slate-500 italic font-sans text-xs">Keine Kaufgebote aktiv</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
 
-                <!-- Asks (Verkaufsangebote - Aggregiert) -->
-                <div>
-                    <h4 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-2 flex items-center justify-between">
-                        <span>🔴 Verkaufsangebote (Asks)</span>
-                        <span class="text-slate-500 text-[10px]">{{ asks|length }} Preisstufen</span>
-                    </h4>
-                    <div class="bg-slate-950 rounded-lg border border-slate-800/80 overflow-hidden">
-                        <table class="w-full text-xs text-left">
-                            <thead class="bg-slate-900 border-b border-slate-800 text-slate-400 font-sans">
-                                <tr>
-                                    <th class="py-2 px-3">Preis</th>
-                                    <th class="py-2 px-3 text-right">Volumen</th>
-                                    <th class="py-2 px-3 text-right">Orders</th>
-                                    <th class="py-2 px-3 text-right">Kumuliert</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-800/40 font-mono">
-                                {% for a in asks %}
-                                <tr onclick="quickFillOrder('BUY', {{ a.limit_price }}, {{ a.total_amount }})"
-                                    class="hover:bg-slate-800/80 cursor-pointer transition select-none {% if a.has_own %}bg-amber-950/20 text-amber-300 border-l-2 border-amber-500{% endif %}"
-                                    title="⚡ Klick: Limitpreis & Kaufmenge sofort ins Formular übernehmen">
-                                    <td class="py-2 px-3 font-bold text-red-400">
-                                        <div class="flex items-center justify-between">
+                    <!-- Asks (Verkaufsangebote) -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center text-xs font-bold text-red-400">
+                            <span class="flex items-center space-x-1">
+                                <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                                <span>Verkaufsangebote (Asks)</span>
+                            </span>
+                            <span class="text-slate-500 font-mono text-[10px]">{{ asks|length }} Stufen</span>
+                        </div>
+
+                        <div class="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden">
+                            <table class="w-full text-xs text-left">
+                                <thead class="bg-slate-900 border-b border-slate-800 text-slate-400 text-[10px] uppercase font-sans">
+                                    <tr>
+                                        <th class="py-2 px-3">Preis</th>
+                                        <th class="py-2 px-3 text-right">Menge</th>
+                                        <th class="py-2 px-3 text-right">Orders</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800/40 font-mono">
+                                    {% for a in asks %}
+                                    <tr onclick="quickFillOrder('BUY', {{ a.limit_price }}, {{ a.total_amount }})"
+                                        class="hover:bg-slate-800/80 cursor-pointer transition select-none {% if a.has_own %}bg-amber-950/20 text-amber-300 border-l-2 border-amber-500{% endif %}"
+                                        title="⚡ Klick: Limitpreis & Kaufmenge sofort ins Formular übernehmen">
+                                        <td class="py-2 px-3 font-bold text-red-400 flex items-center justify-between">
                                             <span>{{ "%.2f"|format(a.limit_price) }}</span>
-                                            <span class="text-[10px] text-amber-400/70 ml-1">⚡</span>
-                                        </div>
-                                    </td>
-                                    <td class="py-2 px-3 text-right text-slate-200">{{ "%.2f"|format(a.total_amount) }}</td>
-                                    <td class="py-2 px-3 text-right text-[11px] text-slate-400">{{ a.order_count }}</td>
-                                    <td class="py-2 px-3 text-right text-slate-400 text-[11px]">{{ "%.2f"|format(a.cumulative_amount) }}</td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="4" class="py-6 text-center text-slate-500 italic font-sans">Keine Verkaufsangebote aktiv</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                                            <span class="text-[10px] text-amber-400/80 opacity-0 hover:opacity-100">{{ icons.nav("bolt", "w-3 h-3 inline") }}</span>
+                                        </td>
+                                        <td class="py-2 px-3 text-right text-slate-200">{{ "%.1f"|format(a.total_amount) }}</td>
+                                        <td class="py-2 px-3 text-right text-slate-400 text-[11px]">{{ a.order_count }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="3" class="py-6 text-center text-slate-500 italic font-sans text-xs">Keine Verkaufsangebote aktiv</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Recent 10 Executed Trades for this resource -->
-            <div class="border-t border-slate-800 pt-4">
-                <div class="flex items-center justify-between mb-2">
-                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
-                        <span>📜</span>
-                        <span>Letzte 10 Abschlüsse ({{ current_resource|capitalize }})</span>
-                    </h4>
-                    <span class="text-slate-500 text-[10px] font-mono">{{ recent_trades|length }} ausgeführt</span>
+            <!-- Recent 10 Executed Trades Tape -->
+            <div class="bg-slate-900/95 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <div class="flex items-center space-x-2">
+                        {{ icons.nav("trades", "w-4 h-4 text-slate-400") }}
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300">
+                            Letzte 10 Abschlüsse ({{ current_resource|capitalize }})
+                        </h4>
+                    </div>
+                    <span class="text-slate-500 text-[10px] font-mono">{{ recent_trades|length }} Einträge</span>
                 </div>
-                <div class="bg-slate-950 rounded-lg border border-slate-800/80 overflow-hidden">
+
+                <div class="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden">
                     <table class="w-full text-xs text-left">
-                        <thead class="bg-slate-900 border-b border-slate-800 text-slate-400 font-sans">
+                        <thead class="bg-slate-900 border-b border-slate-800 text-slate-400 text-[10px] uppercase font-sans">
                             <tr>
-                                <th class="py-1.5 px-3">Uhrzeit</th>
-                                <th class="py-1.5 px-3 text-right">Menge</th>
-                                <th class="py-1.5 px-3 text-right">Ausführungspreis</th>
-                                <th class="py-1.5 px-3 text-right">Gesamtwert</th>
+                                <th class="py-2 px-3">Uhrzeit</th>
+                                <th class="py-2 px-3 text-right">Menge</th>
+                                <th class="py-2 px-3 text-right">Preis</th>
+                                <th class="py-2 px-3 text-right">Gesamtwert</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-800/40 font-mono">
                             {% for t in recent_trades %}
-                            <tr class="hover:bg-slate-900/50 transition">
-                                <td class="py-1.5 px-3 text-slate-500">{{ t.executed_at }}</td>
-                                <td class="py-1.5 px-3 text-right text-slate-200">{{ "%.2f"|format(t.amount) }}</td>
-                                <td class="py-1.5 px-3 text-right font-bold text-amber-300">{{ "%.2f"|format(t.price) }} Taler</td>
-                                <td class="py-1.5 px-3 text-right text-slate-300">{{ "%.2f"|format(t.total_value) }} Taler</td>
+                            <tr class="hover:bg-slate-900/60 transition">
+                                <td class="py-2 px-3 text-slate-500">{{ t.executed_at }}</td>
+                                <td class="py-2 px-3 text-right text-slate-200">{{ "%.1f"|format(t.amount) }}</td>
+                                <td class="py-2 px-3 text-right font-bold text-amber-300">{{ "%.2f"|format(t.price) }}</td>
+                                <td class="py-2 px-3 text-right text-slate-300">{{ "%.2f"|format(t.total_value) }} Taler</td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="4" class="py-4 text-center text-slate-500 italic font-sans">Noch keine Trades für diese Handelsware</td>
+                                <td colspan="4" class="py-4 text-center text-slate-500 italic font-sans text-xs">Noch keine Trades für diese Ware</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -298,20 +316,20 @@
 
 
     <!-- Active Orders Management Section -->
-    <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl" id="my-active-orders-panel">
+    <div class="bg-slate-900/95 border border-slate-800 rounded-2xl p-6 shadow-xl" id="my-active-orders-panel">
         <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
-            <h3 class="text-md font-bold text-slate-200 flex items-center space-x-2">
-                <span>📋</span>
+            <h3 class="text-base font-bold text-slate-100 flex items-center space-x-2">
+                {{ icons.nav("contracts", "w-4 h-4 text-amber-400") }}
                 <span>Meine offenen Marktorders</span>
-                <span class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 font-mono">{{ my_orders|length }}</span>
+                <span class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 font-mono font-bold">{{ my_orders|length }}</span>
             </h3>
-            <span class="text-xs text-slate-500">Stornierungen geben Treuhandmittel sofort und vollständig frei</span>
+            <span class="text-xs text-slate-400">Stornierungen erstatten Treuhandmittel centgenau</span>
         </div>
 
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs font-mono">
                 <thead>
-                    <tr class="border-b border-slate-800 text-slate-400 uppercase tracking-wider font-sans">
+                    <tr class="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px] font-sans">
                         <th class="py-2.5 px-3">Order-ID</th>
                         <th class="py-2.5 px-3">Ware</th>
                         <th class="py-2.5 px-3">Richtung</th>
@@ -326,24 +344,20 @@
                     {% for mo in my_orders %}
                     <tr class="hover:bg-slate-800/40 transition {% if mo.is_current_resource %}bg-slate-800/20{% endif %}" id="order-row-{{ mo.id }}">
                         <td class="py-2.5 px-3 text-slate-400">#{{ mo.id }}</td>
-                        <td class="py-2.5 px-3 uppercase font-bold text-amber-300 font-sans">
-                            {% if mo.resource_type == 'wood' %}🪵 Holz
-                            {% elif mo.resource_type == 'stone' %}🪨 Stein
-                            {% elif mo.resource_type == 'iron' %}⛓️ Eisen
-                            {% elif mo.resource_type == 'grain' %}🌾 Getreide
-                            {% elif mo.resource_type == 'cloth' %}🧵 Tuch
-                            {% else %}{{ mo.resource_type }}{% endif %}
+                        <td class="py-2.5 px-3 uppercase font-bold text-amber-300 font-sans flex items-center space-x-1.5">
+                            {{ icons.commodity(mo.resource_type, "w-3.5 h-3.5 text-amber-400") }}
+                            <span>{{ mo.resource_type }}</span>
                         </td>
                         <td class="py-2.5 px-3 font-bold {% if mo.order_type == 'BUY' %}text-emerald-400{% else %}text-red-400{% endif %}">
                             {{ mo.order_type }}
                         </td>
-                        <td class="py-2.5 px-3 text-slate-200">{{ "%.2f"|format(mo.remaining) }} / {{ "%.2f"|format(mo.amount) }}</td>
+                        <td class="py-2.5 px-3 text-slate-200">{{ "%.1f"|format(mo.remaining) }} / {{ "%.1f"|format(mo.amount) }}</td>
                         <td class="py-2.5 px-3 text-amber-300 font-bold">{{ "%.2f"|format(mo.limit_price) }} Taler</td>
                         <td class="py-2.5 px-3 text-slate-300">
                             {% if mo.order_type == 'BUY' %}
                                 {{ "%.2f"|format(mo.total_value) }} Taler
                             {% else %}
-                                {{ "%.2f"|format(mo.remaining) }} {{ mo.resource_type }}
+                                {{ "%.1f"|format(mo.remaining) }} {{ mo.resource_type }}
                             {% endif %}
                         </td>
                         <td class="py-2.5 px-3 text-slate-500">{{ mo.created_at.strftime('%H:%M:%S') }}</td>
@@ -354,7 +368,7 @@
                                   class="inline-block">
                                 <input type="hidden" name="resource_type" value="{{ current_resource }}">
                                 <button type="submit"
-                                        class="px-2.5 py-1 rounded bg-red-950/60 text-red-400 border border-red-800/50 hover:bg-red-900/60 transition text-[11px] cursor-pointer">
+                                        class="px-2.5 py-1 rounded-lg bg-red-950/60 text-red-400 border border-red-800/50 hover:bg-red-900/60 transition text-[11px] cursor-pointer">
                                     Stornieren
                                 </button>
                             </form>
@@ -362,7 +376,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="8" class="py-6 text-center text-slate-500 italic font-sans">
+                        <td colspan="8" class="py-6 text-center text-slate-500 italic font-sans text-xs">
                             Du hast derzeit keine aktiven Orders im Markt.
                         </td>
                     </tr>
@@ -404,7 +418,6 @@
             if (amountInput) amountInput.value = amt;
         }
 
-        // Highlight input fields
         if (priceInput && amountInput) {
             priceInput.classList.add('ring-2', 'ring-amber-400');
             amountInput.classList.add('ring-2', 'ring-amber-400');
@@ -414,7 +427,6 @@
             }, 800);
         }
 
-        // Smooth scroll to order placement on small screens
         const card = document.getElementById('order-placement-card');
         if (card && window.innerWidth < 1024) {
             card.scrollIntoView({ behavior: 'smooth', block: 'center' });

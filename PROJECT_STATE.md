@@ -1,8 +1,8 @@
 # Project State: Handelsimperium
 
-**Generated:** 2026-09-12T22:12:00+02:00  
+**Generated:** 2026-09-12T22:18:00+02:00  
 **Repository Branch:** `master`  
-**Current Phase:** Phase 6 (Merchant Guilds, Cooperative Monuments & Alliance Buffs)  
+**Current Phase:** Phase 7 (Visual Overhaul, Quest Onboarding Tutorial & Merchant Handbook)  
 **Production Host:** `80.158.79.44` (`ssh server`)  
 **Public Endpoint:** [http://80.158.79.44/](http://80.158.79.44/)
 
@@ -18,7 +18,7 @@
 | **Runtime Environment** | Python 3.12 | Virtualenv at `/opt/handelsimperium/.venv` |
 | **Database** | PostgreSQL 16 | Localhost:5432, db `handelsimperium`, user `handelsimperium_user` |
 | **Connection Pooling** | `psycopg_pool.ConnectionPool` | Min: 4, Max: 20 connections |
-| **Frontend Architecture** | Jinja2 + HTMX + Tailwind CSS | Server-side rendering, partial DOM swaps, mobile responsive |
+| **Frontend Architecture** | Jinja2 + HTMX + Tailwind CSS | Server-side rendering, partial DOM swaps, mobile responsive, inline SVGs |
 | **PWA Layer** | Web App Manifest + Service Worker | `/static/manifest.json`, `/static/sw.js`, `/static/icon.svg` |
 | **Firewall** | Linux `ufw` | ALLOW: 22, 80, 443; DENY: 5432 (PostgreSQL), 8000 (Uvicorn) |
 | **Backups** | `cron` + `pg_dump` + `gzip -9` | `/var/backups/handelsimperium/` daily at 03:00 UTC, 7-day retention |
@@ -88,7 +88,7 @@
 ### 2.7 `notifications` (Phase 5)
 - `id`: `SERIAL PRIMARY KEY`
 - `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
-- `event_type`: `VARCHAR(32) NOT NULL` (`TRADE_EXECUTED`, `CONTRACT_FULFILLED`, `STORAGE_OVERFLOW`, `GUILD_CREATED`, `GUILD_JOINED`, `MONUMENT_COMPLETED`)
+- `event_type`: `VARCHAR(32) NOT NULL` (`TRADE_EXECUTED`, `CONTRACT_FULFILLED`, `STORAGE_OVERFLOW`, `GUILD_CREATED`, `GUILD_JOINED`, `MONUMENT_COMPLETED`, `TUTORIAL_REWARD_CLAIMED`)
 - `payload`: `JSONB NOT NULL DEFAULT '{}'::jsonb`
 - `is_read`: `BOOLEAN NOT NULL DEFAULT FALSE`
 - `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
@@ -145,6 +145,14 @@
 - *Constraints:* `UNIQUE(guild_id, project_type)`
 - *Index:* `idx_guild_projects_lookup ON (guild_id, is_completed)`
 - *Index:* `idx_guild_projects_perk ON (guild_id, project_type, is_completed)`
+
+### 2.13 `user_tutorials` (Phase 7)
+- `user_id`: `INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE`
+- `current_step`: `INT NOT NULL DEFAULT 1`
+- `completed_steps`: `JSONB NOT NULL DEFAULT '[]'::jsonb`
+- `is_finished`: `BOOLEAN NOT NULL DEFAULT FALSE`
+- `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- *Index:* `idx_user_tutorials_lookup ON (user_id, is_finished)`
 
 ---
 
@@ -221,14 +229,32 @@ $$\text{SunkCapital}(b, L) = \sum_{k=1}^{L-1} \left[ \text{cost}_{\text{balance}
   - `FREIHAFEN`: Market trading fee reduced from 2.0% to 1.5% for all guild members.
   - `SPEICHERSTADT`: +10% flat storage capacity on all warehouse levels for all guild members.
 
+### Phase 7: Visual Overhaul, Quest Onboarding Tutorial & Merchant Handbook
+- **Visual & Graphic Overhaul:**
+  - Mercantile terminal styling: Deep maritime slate (`slate-950`, `slate-900`) and amber accents (`amber-500`, `amber-600`).
+  - Crisp inline SVG icon system (`components/icons.html`) replacing text labels and emojis.
+  - Dual-column financial trading terminal layout for `/market/book` (order entry & metrics on the left, depth ladder & trade tape on the right).
+  - Detailed capacity percentage bars across all commodity stores and warehouse tiers.
+- **Modular Onboarding Quest Engine ("Kaufmannslehre"):**
+  - `GET /tutorial/widget` (Persistent, dismissible quest widget on the dashboard).
+  - `POST /tutorial/claim` (Atomic eligibility verification, milestone progression, and reward disbursement).
+  - 5 Progressive Milestones:
+    1. *Bestandsaufnahme*: Inspect inventory & warehouse (Reward: 25.00 Taler).
+    2. *Expansion*: Upgrade any production building to Level 2 (Reward: 50.00 Taler).
+    3. *Marktzugang*: Place an active order on the exchange (Reward: 25.00 Wood, 25.00 Stone).
+    4. *Fernhandel*: Complete an export contract or place 2 orders (Reward: 100.00 Taler).
+    5. *Zunftbeitritt*: Join or found a merchant guild (Reward: 150.00 Taler).
+- **Living In-Game Merchant Handbook ("Das Kontor-Handbuch"):**
+  - `GET /handbuch` (Indexed reference manual directly exposing backend formulas, building costs, reference prices, and guild perks).
+
 ---
 
 ## 5. Test Suite Metrics
 
 All tests execute cleanly directly against PostgreSQL on the production server:
-- **Total Test Files:** 7
-- **Total Tests:** 32
-- **Pass Rate:** 100% (32 passed in 7.43s)
+- **Total Test Files:** 8
+- **Total Tests:** 36
+- **Pass Rate:** 100% (36 passed in 8.03s)
 
 | Test File | Tests | Coverage Scope |
 | :--- | :--- | :--- |
@@ -239,6 +265,7 @@ All tests execute cleanly directly against PostgreSQL on the production server:
 | `tests/test_phase4_features.py` | 5 | Net worth math, capital conservation, ranking cache, CSRF middleware, PWA assets |
 | `tests/test_phase5_features.py` | 4 | Export contracts, trade notification dispatch, economic telemetry, HTMX flow |
 | `tests/test_phase6_guilds.py` | 5 | Guild founding, succession, monument contributions, Freihafen fee perk, Speicherstadt cap perk, HTMX flow |
+| `tests/test_phase7_tutorial.py` | 4 | 5-step tutorial quest progression & rewards, duplicate claim prevention, handbook accuracy, SVG template integrity |
 | `tests/test_production.py` | 2 | Offline production delta calculation and storage cap enforcement |
 | `tests/test_progression_and_cancel.py` | 5 | Multi-resource upgrade sufficiency/rollback, warehouse cap, aggregated depth |
 

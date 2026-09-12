@@ -1,0 +1,92 @@
+{% import "components/icons.html" as icons %}
+
+<div id="tutorial-widget-container" class="transition-all duration-300">
+    <!-- Out of band balance update -->
+    {% if user %}
+    <span id="user-balance-badge" hx-swap-oob="true" class="font-mono text-amber-300 font-bold">
+        {{ "%.2f"|format(user.balance) }}
+    </span>
+    {% endif %}
+
+    {% if not tut.is_finished %}
+    <div class="bg-gradient-to-r from-slate-900 via-amber-950/20 to-slate-900 border border-amber-500/40 rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden">
+        <!-- Accent Glow Line -->
+        <div class="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-600 via-amber-400 to-amber-600"></div>
+
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-1.5 flex-1">
+                <div class="flex items-center space-x-2">
+                    <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold uppercase tracking-wider border border-amber-500/40 flex items-center space-x-1">
+                        {{ icons.nav("tutorial", "w-3 h-3") }}
+                        <span>Kaufmannslehre</span>
+                    </span>
+                    <span class="text-xs text-slate-400 font-mono">Schritt {{ tut.current_step }} von {{ tut.total_steps }}</span>
+                </div>
+
+                <h3 class="text-sm sm:text-base font-black text-slate-100 flex items-center space-x-2">
+                    <span>{{ tut.step_info.title }}</span>
+                </h3>
+
+                <p class="text-xs text-slate-300 leading-relaxed max-w-3xl">
+                    {{ tut.step_info.description }}
+                </p>
+
+                <!-- Requirements & Reward Summary -->
+                <div class="flex flex-wrap items-center gap-3 pt-1 text-xs">
+                    <span class="text-slate-400 flex items-center space-x-1">
+                        <span class="text-amber-400 font-semibold">Ziel:</span>
+                        <span>{{ tut.step_info.requirement_text }}</span>
+                    </span>
+                    <span class="text-amber-300 font-semibold flex items-center space-x-1 bg-slate-950/80 px-2 py-0.5 rounded border border-amber-500/20">
+                        <span>Belohnung:</span>
+                        <span>{{ tut.step_info.reward_desc }}</span>
+                    </span>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row md:flex-col items-end justify-center gap-2 shrink-0">
+                <!-- Progress Bar -->
+                <div class="w-full sm:w-44 text-right space-y-1">
+                    <div class="flex justify-between text-[10px] text-slate-400 font-mono">
+                        <span>Fortschritt</span>
+                        <span class="text-amber-400 font-bold">{{ tut.progress_pct }}%</span>
+                    </div>
+                    <div class="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                        <div class="bg-gradient-to-r from-amber-500 to-amber-400 h-1.5 rounded-full transition-all duration-500"
+                             style="width: {{ tut.progress_pct }}%"></div>
+                    </div>
+                </div>
+
+                <!-- Claim or Status Button -->
+                {% if tut.is_eligible %}
+                <form hx-post="/tutorial/claim"
+                      hx-target="#tutorial-widget-container"
+                      hx-swap="outerHTML">
+                    <button type="submit"
+                            class="min-h-[42px] px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition flex items-center space-x-1.5 cursor-pointer animate-pulse">
+                        {{ icons.nav("check", "w-4 h-4") }}
+                        <span>Belohnung einfordern!</span>
+                    </button>
+                </form>
+                {% else %}
+                <div class="min-h-[38px] px-3.5 py-2 bg-slate-950/80 border border-slate-800 text-slate-400 rounded-xl text-xs font-medium flex items-center space-x-1.5">
+                    <span class="w-2 h-2 rounded-full bg-amber-500/80 animate-ping"></span>
+                    <span>Aufgabe noch offen</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Completed Badge (Subtle banner) -->
+    <div class="bg-slate-900/60 border border-emerald-800/40 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-emerald-300 shadow">
+        <div class="flex items-center space-x-2">
+            {{ icons.nav("check", "w-4 h-4 text-emerald-400") }}
+            <span class="font-bold text-slate-200">Kaufmannslehre meisterhaft vollendet!</span>
+            <span class="text-slate-400 hidden sm:inline">— Du führst nun die Geschäfte eines vollwertigen Hansekaufmanns.</span>
+        </div>
+        <button onclick="document.getElementById('tutorial-widget-container').remove()"
+                class="text-slate-500 hover:text-slate-300 font-bold px-1.5 py-0.5 rounded">&times;</button>
+    </div>
+    {% endif %}
+</div>

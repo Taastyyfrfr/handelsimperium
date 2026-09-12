@@ -14,6 +14,8 @@ from app.routes.ranking import router as ranking_router
 from app.routes.notifications import router as notifications_router
 from app.routes.contracts import router as contracts_router
 from app.routes.guilds import router as guilds_router
+from app.routes.tutorial import router as tutorial_router
+from app.routes.handbook import router as handbook_router
 from app.routes.admin import router as admin_router
 import os
 
@@ -51,6 +53,8 @@ app.include_router(ranking_router)
 app.include_router(notifications_router)
 app.include_router(contracts_router)
 app.include_router(guilds_router)
+app.include_router(tutorial_router)
+app.include_router(handbook_router)
 app.include_router(admin_router)
 
 @app.get("/health")

@@ -3,21 +3,25 @@
 {% block title %}Kontor - Handelsimperium{% endblock %}
 
 {% block content %}
+{% import "components/icons.html" as icons %}
+
 <!-- Offline Catchup Modal Container -->
 <div id="catchup-modal-container" hx-get="/resources/catchup" hx-trigger="load" hx-swap="outerHTML"></div>
 
 <div class="space-y-6">
-    <!-- Navigation Tabs -->
+    <!-- Onboarding Tutorial Quest Widget Container -->
+    <div id="tutorial-widget-container" hx-get="/tutorial/widget" hx-trigger="load" hx-swap="outerHTML"></div>
 
+    <!-- Navigation Tabs -->
     <div class="flex flex-wrap items-center justify-between border-b border-slate-800 pb-3 gap-4">
-        <nav class="flex space-x-2" aria-label="Tabs" id="main-tabs">
+        <nav class="flex flex-wrap gap-2" aria-label="Tabs" id="main-tabs">
             <button id="tab-resources"
                     hx-get="/resources/overview"
                     hx-target="#main-panel"
                     hx-swap="innerHTML"
                     class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center space-x-2 bg-amber-600 text-slate-950 shadow-md">
-                <span>🌾</span>
-                <span>Rohstoffübersicht</span>
+                {{ icons.nav("resources", "w-4 h-4") }}
+                <span>Rohstoffe</span>
             </button>
 
             <button id="tab-market"
@@ -25,8 +29,8 @@
                     hx-target="#main-panel"
                     hx-swap="innerHTML"
                     class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center space-x-2 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100">
-                <span>⚖️</span>
-                <span>Markt & Orderbuch</span>
+                {{ icons.nav("market", "w-4 h-4") }}
+                <span>Börse</span>
             </button>
 
             <button id="tab-trades"
@@ -34,8 +38,8 @@
                     hx-target="#main-panel"
                     hx-swap="innerHTML"
                     class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center space-x-2 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100">
-                <span>📜</span>
-                <span>Handelsprotokoll</span>
+                {{ icons.nav("trades", "w-4 h-4") }}
+                <span>Protokoll</span>
             </button>
 
             <button id="tab-ranking"
@@ -43,7 +47,7 @@
                     hx-target="#main-panel"
                     hx-swap="innerHTML"
                     class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center space-x-2 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100">
-                <span>🏆</span>
+                {{ icons.nav("ranking", "w-4 h-4") }}
                 <span>Rangliste</span>
             </button>
 
@@ -52,7 +56,7 @@
                     hx-target="#main-panel"
                     hx-swap="innerHTML"
                     class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center space-x-2 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100">
-                <span>🐫</span>
+                {{ icons.nav("contracts", "w-4 h-4") }}
                 <span>Karawanen</span>
             </button>
 
@@ -61,15 +65,24 @@
                     hx-target="#main-panel"
                     hx-swap="innerHTML"
                     class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center space-x-2 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100">
-                <span>🛡️</span>
+                {{ icons.nav("guild", "w-4 h-4") }}
                 <span>Gilde</span>
+            </button>
+
+            <button id="tab-handbook"
+                    hx-get="/handbuch"
+                    hx-target="#main-panel"
+                    hx-swap="innerHTML"
+                    class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center space-x-2 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100">
+                {{ icons.nav("handbook", "w-4 h-4") }}
+                <span>Handbuch</span>
             </button>
         </nav>
 
         <!-- Live Refresh Trigger -->
         <div class="flex items-center space-x-2 text-xs text-slate-400">
             <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Server-Status: Synchronisiert</span>
+            <span>Server: Verbunden</span>
         </div>
     </div>
 

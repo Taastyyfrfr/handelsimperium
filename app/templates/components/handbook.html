@@ -1,0 +1,225 @@
+{% import "components/icons.html" as icons %}
+
+<div class="space-y-6">
+    <!-- Header Banner -->
+    <div class="bg-gradient-to-r from-slate-900 via-amber-950/30 to-slate-900 border border-amber-500/40 rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="space-y-1">
+            <div class="flex items-center space-x-2.5">
+                <span class="p-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    {{ icons.nav("handbook", "w-6 h-6") }}
+                </span>
+                <div>
+                    <h2 class="text-xl font-black text-amber-400">Das Kontor-Handbuch</h2>
+                    <span class="text-xs text-slate-400">Offizieller Kodex der Hanseatischen Kaufmannschaft</span>
+                </div>
+            </div>
+            <p class="text-xs text-slate-300 max-w-3xl leading-relaxed pt-1">
+                Dieses Handbuch enthält sämtliche mathematischen Regeln, Baukostenformeln und Börsenrichtlinien. 
+                Alle Werte werden direkt aus den lebenden Spielkonstanten des Servers gespeist.
+            </p>
+        </div>
+        <div class="bg-slate-950/80 border border-slate-800 px-4 py-2.5 rounded-xl text-right text-xs shrink-0">
+            <span class="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Server-Regelwerk</span>
+            <span class="text-amber-400 font-mono font-bold mt-0.5 block">v1.0 Synchron</span>
+        </div>
+    </div>
+
+    <!-- Handbook Layout: Navigation Tabs & Content Sections -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Quick Index Sidebar -->
+        <div class="lg:col-span-1 space-y-2">
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 sticky top-20 shadow-lg space-y-1">
+                <span class="text-[10px] uppercase font-bold text-slate-400 block tracking-wider mb-2">Inhaltsverzeichnis</span>
+                <a href="#handbuch-produktion" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
+                    1. Offline-Produktion & Lager
+                </a>
+                <a href="#handbuch-betriebe" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
+                    2. Betriebe & Baukosten
+                </a>
+                <a href="#handbuch-boerse" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
+                    3. Börse & Orderbuch
+                </a>
+                <a href="#handbuch-karawanen" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
+                    4. Kaiserliche Karawanen
+                </a>
+                <a href="#handbuch-gilden" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
+                    5. Gilden & Monumente
+                </a>
+                <a href="#handbuch-lehre" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
+                    6. Kaufmannslehre (Quests)
+                </a>
+            </div>
+        </div>
+
+        <!-- Detailed Sections (3 Cols) -->
+        <div class="lg:col-span-3 space-y-6">
+            <!-- 1. Offline-Produktion -->
+            <section id="handbuch-produktion" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
+                <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
+                    {{ icons.nav("resources", "w-5 h-5 text-amber-400") }}
+                    <h3 class="text-base font-bold text-slate-100">1. On-Demand Offline-Produktion & Lagerkapazität</h3>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Handelsimperium verzichtet auf ressourcenfressende Hintergrund-Ticks. Erträge werden <strong>on-demand</strong> beim Betreten des Kontors anhand der exakten Zeitdifferenz berechnet:
+                </p>
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-xs text-amber-300 space-y-1">
+                    <div>Δt = Jetzt - letzter_Berechnungszeitpunkt (in Sekunden)</div>
+                    <div>Neuer_Bestand = min(Lagerkapazität, Alter_Bestand + (Δt × Produktionsrate))</div>
+                </div>
+                <div class="text-xs text-slate-300 space-y-1.5 pt-1">
+                    <p><strong>Lagerkapazitätsformel:</strong> Das Zentrallager besitzt auf Stufe 1 eine Grundkapazität von <span class="font-mono text-amber-400">{{ "%.0f"|format(base_storage_cap) }}</span> Einheiten je Ware und skaliert deterministisch:</p>
+                    <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-slate-200">
+                        Lagerlimit(Stufe) = round({{ "%.0f"|format(base_storage_cap) }} × 1.5^(Stufe - 1))
+                    </div>
+                    <p class="text-slate-400 text-[11px] italic">
+                        * Hinweis: Güter, die das Lagerlimit überschreiten, verfallen unwiderruflich ("Lagerüberlauf"). Baue rechtzeitig Dein Zentrallager aus!
+                    </p>
+                </div>
+            </section>
+
+            <!-- 2. Betriebe & Baukosten -->
+            <section id="handbuch-betriebe" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
+                    {{ icons.commodity("stone", "w-5 h-5 text-amber-400") }}
+                    <h3 class="text-base font-bold text-slate-100">2. Betriebe, Werkstätten & Ausbauformeln</h3>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Jeder Betrieb benötigt für seinen Ausbau eine ausgewogene Kombination aus Baumaterialien und Taler. Die Kosten wachsen exponentiell um den Faktor <strong>1.5</strong>, während der Ertrag um <strong>1.25</strong> pro Stufe steigt:
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
+                    <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-amber-300">
+                        Baukosten(L) = Basiskosten × 1.5^(L - 1)
+                    </div>
+                    <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-emerald-400">
+                        Ertrag(L) = Basisrate × 1.25^(L - 1)
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto pt-1">
+                    <table class="w-full text-left text-xs">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
+                                <th class="py-2 px-3">Betrieb</th>
+                                <th class="py-2 px-3">Ware</th>
+                                <th class="py-2 px-3">Basisrate (pro Min)</th>
+                                <th class="py-2 px-3">Stufe 1 Ausbaukosten</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/60 font-mono">
+                            {% for b_key, b_info in building_config.items() %}
+                            <tr>
+                                <td class="py-2 px-3 font-sans font-bold text-slate-200">{{ b_info.name }}</td>
+                                <td class="py-2 px-3 uppercase text-slate-300">{{ b_info.resource or "Lager" }}</td>
+                                <td class="py-2 px-3 text-emerald-400">{{ (b_info.base_rate * 60)|round(1) }}/min</td>
+                                <td class="py-2 px-3 text-slate-400 text-[11px]">
+                                    {% for ck, cv in b_info.base_costs.items() %}
+                                    {{ "%.0f"|format(cv) }} {{ ck }}{% if not loop.last %}, {% endif %}
+                                    {% endfor %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 3. Börse & Orderbuch -->
+            <section id="handbuch-boerse" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
+                <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
+                    {{ icons.nav("market", "w-5 h-5 text-amber-400") }}
+                    <h3 class="text-base font-bold text-slate-100">3. Die Hansebörse: Atomares Orderbuch & Gebühren</h3>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Die Börse arbeitet mit einem strikten <strong>Preis-Zeit-Prioritätsalgorithmus</strong> unter datenbankweiten Zeilensperren (`SELECT ... FOR UPDATE`).
+                </p>
+                <div class="space-y-2 text-xs text-slate-300">
+                    <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
+                        <div class="flex justify-between items-center text-slate-200">
+                            <span class="font-semibold">Standard-Börsengebühr:</span>
+                            <span class="font-mono text-amber-400 font-bold">{{ market_fee_pct }}% auf ausgeführte Trades</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400">
+                            Wird dem Verkäufer vom Nettoerlös abgezogen und dem Wirtschaftskreislauf als Deflationsschutz dauerhaft entzogen.
+                        </p>
+                    </div>
+
+                    <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
+                        <span class="font-semibold text-slate-200 block">Treuhand & Stornierung:</span>
+                        <p class="text-[11px] text-slate-400">
+                            Bei Erstellung einer Kauforder wird das Limitguthaben im Treuhandkonto gebunden. Bei einer Verkaufsorder werden die Waren im Lager gesperrt. Bei Stornierung einer noch offenen Order werden alle unvollständigen Einheiten ohne Gebührenabzug sofort und centgenau erstattet.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. Karawanen -->
+            <section id="handbuch-karawanen" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
+                <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
+                    {{ icons.nav("contracts", "w-5 h-5 text-amber-400") }}
+                    <h3 class="text-base font-bold text-slate-100">4. Kaiserliche Karawanen (Handelsverträge)</h3>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Täglich um <strong>00:00 Uhr UTC</strong> treffen 3 neue Handelskarawanen im Kontor ein. Sie garantieren feste Abnahmepreise und schützen Kaufleute vor Marktstagnation:
+                </p>
+                <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 space-y-1">
+                    <p>• Karawanen kaufen feste Kontingente auf und verbrennen gelieferte Rohstoffe unwiderruflich.</p>
+                    <p>• Nicht erfüllte Verträge verfallen um Mitternacht UTC und werden durch neue Gesuche ersetzt.</p>
+                </div>
+            </section>
+
+            <!-- 5. Gilden & Monumente -->
+            <section id="handbuch-gilden" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
+                <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
+                    {{ icons.nav("guild", "w-5 h-5 text-amber-400") }}
+                    <h3 class="text-base font-bold text-slate-100">5. Kaufmannsgilden & Bündnis-Segen</h3>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Kaufleute können für <span class="font-mono text-amber-400 font-bold">{{ "%.0f"|format(guild_creation_fee) }} Taler</span> eine Gilde gründen oder Allianzen beitreten. Durch gemeinsame Baustoffspenden errichten Gildenmitglieder dauerhafte Weltwunder:
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    {% for p_key, p_info in guild_projects.items() %}
+                    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-slate-200 text-xs">{{ p_info.name }}</span>
+                            <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold">
+                                {{ p_key }}
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-slate-400">{{ p_info.description }}</p>
+                        <div class="text-[10px] text-slate-500 pt-1 border-t border-slate-800 font-mono">
+                            Zielkosten:
+                            {% for rk, rv in p_info.target_costs.items() %}
+                            {{ "%.0f"|format(rv) }} {{ rk }}{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <!-- 6. Kaufmannslehre -->
+            <section id="handbuch-lehre" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
+                <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
+                    {{ icons.nav("tutorial", "w-5 h-5 text-amber-400") }}
+                    <h3 class="text-base font-bold text-slate-100">6. Die Kaufmannslehre: Ausbildungsstufen & Prämien</h3>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Neulinge erhalten bei Absolvierung der 5 Ausbildungsstufen wertvolle Starthilfen und Rohstofflieferungen:
+                </p>
+                <div class="space-y-2">
+                    {% for sid, sinfo in tutorial_steps.items() %}
+                    <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+                        <div class="space-y-0.5">
+                            <span class="font-bold text-slate-200">{{ sinfo.title }}</span>
+                            <p class="text-[11px] text-slate-400">{{ sinfo.requirement_text }}</p>
+                        </div>
+                        <span class="font-mono text-emerald-400 font-semibold text-right shrink-0">
+                            + {{ sinfo.reward_desc }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
