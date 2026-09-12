@@ -1,0 +1,135 @@
+<!-- Resource Overview Component (HTMX Partial) -->
+<div class="space-y-6">
+    <!-- Out of band update for user balance in navbar -->
+    {% if user %}
+    <span id="user-balance-badge" hx-swap-oob="true" class="font-mono text-amber-300 font-bold">
+        {{ "%.2f"|format(user.balance) }}
+    </span>
+    {% endif %}
+
+    <!-- Alert / Messages -->
+    {% if message %}
+    <div class="p-4 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 text-sm flex items-center justify-between">
+        <span>✨ {{ message }}</span>
+        <button onclick="this.parentElement.remove()" class="text-emerald-500 hover:text-emerald-300">&times;</button>
+    </div>
+    {% endif %}
+    {% if error %}
+    <div class="p-4 rounded-xl bg-red-950/60 border border-red-800/60 text-red-300 text-sm flex items-center justify-between">
+        <span>⚠️ {{ error }}</span>
+        <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-300">&times;</button>
+    </div>
+    {% endif %}
+
+    <!-- Header Actions & Offline Info -->
+    <div class="flex flex-wrap items-center justify-between bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+        <div>
+            <h2 class="text-lg font-bold text-amber-400">Lagerhaus & Produktion</h2>
+            <p class="text-xs text-slate-400">
+                Offline-Generierung erfolgt deterministisch bei jedem Seitenaufruf anhand von Zeitstempel-Deltas.
+            </p>
+        </div>
+        <button hx-get="/resources/overview"
+                hx-target="#main-panel"
+                hx-swap="innerHTML"
+                class="mt-2 sm:mt-0 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-600/20 text-amber-300 border border-amber-500/30 hover:bg-amber-600/30 transition flex items-center space-x-1">
+            <span>🔄 Jetzt Ertrag berechnen</span>
+        </button>
+    </div>
+
+    <!-- Inventory Cards Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {% for inv in inventories %}
+        {% set pct = (inv.amount / inv.storage_cap * 100)|round(1) %}
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between shadow-lg relative overflow-hidden">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-semibold uppercase tracking-wider text-slate-300">
+                    {% if inv.resource_type == 'wood' %}🪵 Holz
+                    {% elif inv.resource_type == 'stone' %}🪨 Stein
+                    {% elif inv.resource_type == 'iron' %}⛓️ Eisen
+                    {% elif inv.resource_type == 'grain' %}🌾 Getreide
+                    {% elif inv.resource_type == 'cloth' %}🧵 Tuch
+                    {% else %}{{ inv.resource_type }}{% endif %}
+                </span>
+                <span class="text-xs font-mono text-slate-500">+{{ (inv.production_rate * 60)|round(1) }}/m</span>
+            </div>
+
+            <div class="my-2">
+                <div class="text-2xl font-bold font-mono text-amber-300">
+                    {{ "%.2f"|format(inv.amount) }}
+                </div>
+                <div class="text-xs text-slate-400 flex justify-between mt-1">
+                    <span>Kapazität:</span>
+                    <span>{{ "%.0f"|format(inv.storage_cap) }}</span>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
+                <div class="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
+                     style="width: {{ pct if pct <= 100 else 100 }}%"></div>
+            </div>
+            
+            {% if inv.delta_seconds > 0 %}
+            <div class="text-[10px] text-slate-500 mt-2 text-right">
+                Ertrag (+{{ inv.generated }}) über {{ inv.delta_seconds }}s
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Production Buildings Section -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl">
+        <h3 class="text-md font-bold text-slate-200 mb-4 flex items-center space-x-2">
+            <span>🏭</span>
+            <span>Produktionsbetriebe & Gildenwerkstätten</span>
+        </h3>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b border-slate-800 text-slate-400 text-xs uppercase tracking-wider">
+                        <th class="py-3 px-4">Betrieb</th>
+                        <th class="py-3 px-4">Erzeugnis</th>
+                        <th class="py-3 px-4">Stufe</th>
+                        <th class="py-3 px-4">Erzeugungsrate</th>
+                        <th class="py-3 px-4">Lagerkapazität</th>
+                        <th class="py-3 px-4">Ausbaukosten</th>
+                        <th class="py-3 px-4 text-right">Aktion</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/60">
+                    {% for b in buildings %}
+                    <tr class="hover:bg-slate-800/40 transition">
+                        <td class="py-3 px-4 font-semibold text-slate-200">{{ b.name }}</td>
+                        <td class="py-3 px-4 capitalize text-slate-300">{{ b.resource }}</td>
+                        <td class="py-3 px-4 font-mono font-bold text-amber-400">Stufe {{ b.level }}</td>
+                        <td class="py-3 px-4 font-mono text-slate-300">{{ (b.production_rate * 60)|round(1) }} / Min</td>
+                        <td class="py-3 px-4 font-mono text-slate-400">{{ "%.0f"|format(b.storage_cap) }} Einheiten</td>
+                        <td class="py-3 px-4 font-mono text-amber-300 font-semibold">{{ "%.2f"|format(b.upgrade_cost) }} Taler</td>
+                        <td class="py-3 px-4 text-right">
+                            <form hx-post="/resources/upgrade"
+                                  hx-target="#main-panel"
+                                  hx-swap="innerHTML"
+                                  class="inline-block">
+                                <input type="hidden" name="building_type" value="{{ b.building_type }}">
+                                <button type="submit"
+                                        {% if user.balance < b.upgrade_cost %}disabled{% endif %}
+                                        class="px-3 py-1.5 text-xs font-bold rounded-lg transition shadow-sm
+                                        {% if user.balance >= b.upgrade_cost %}
+                                            bg-amber-600 hover:bg-amber-500 text-slate-950 cursor-pointer
+                                        {% else %}
+                                            bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700
+                                        {% endif %}">
+                                    Ausbauen
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

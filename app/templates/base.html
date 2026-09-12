@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="de" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Handelsimperium{% endblock %}</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gold: {
+                            400: '#facc15',
+                            500: '#eab308',
+                            600: '#ca8a04',
+                            700: '#a16207',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- HTMX CDN -->
+    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    <style>
+        .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
+        .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans selection:bg-amber-500 selection:text-black">
+    <!-- Top Header / Navigation -->
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <span class="text-2xl">🏛️</span>
+                <a href="/" class="text-xl font-bold tracking-wider text-amber-400 hover:text-amber-300 transition">
+                    HANDELSIMPERIUM
+                </a>
+                <span class="text-xs px-2 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-800/50">v1.0</span>
+            </div>
+
+            {% if user %}
+            <div class="flex items-center space-x-6">
+                <!-- User Balance Badge -->
+                <div class="flex items-center space-x-2 bg-slate-800/90 px-3 py-1.5 rounded-lg border border-amber-500/30">
+                    <span class="text-amber-400 font-semibold">🪙 Taler:</span>
+                    <span id="user-balance-badge" class="font-mono text-amber-300 font-bold">
+                        {{ "%.2f"|format(user.balance) }}
+                    </span>
+                </div>
+
+                <!-- User Profile & Logout -->
+                <div class="flex items-center space-x-3 text-sm">
+                    <span class="text-slate-400">Kaufmann: <strong class="text-slate-200">{{ user.username }}</strong></span>
+                    <a href="/auth/logout" class="px-2.5 py-1 text-xs rounded bg-red-950/60 text-red-400 border border-red-800/40 hover:bg-red-900/50 transition">
+                        Abmelden
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800/60 py-4 text-center text-xs text-slate-500">
+        Handelsimperium &copy; 2026 &bull; Offline-Produktion &bull; Atomares Orderbuch (2% Marktgebühr)
+    </footer>
+</body>
+</html>

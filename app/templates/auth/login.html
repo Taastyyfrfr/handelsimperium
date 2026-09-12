@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Anmeldung - Handelsimperium{% endblock %}
+
+{% block content %}
+<div class="min-h-[70vh] flex flex-col justify-center items-center">
+    <div class="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-xl p-8 shadow-2xl backdrop-blur">
+        <div class="text-center mb-6">
+            <h1 class="text-2xl font-bold text-amber-400">Tor zur Handelsgilde</h1>
+            <p class="text-sm text-slate-400 mt-1">Trete ein und baue Dein Wirtschaftsimperium auf</p>
+        </div>
+
+        {% if error %}
+        <div class="mb-4 p-3 rounded-lg bg-red-950/60 border border-red-800/60 text-red-300 text-sm">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form action="/auth/login" method="POST" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Kaufmannsname</label>
+                <input type="text" name="username" required autofocus
+                       class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-amber-500 transition">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Passwort</label>
+                <input type="password" name="password" required
+                       class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-amber-500 transition">
+            </div>
+
+            <button type="submit"
+                    class="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-lg shadow-lg hover:shadow-amber-600/30 transition">
+                Einloggen
+            </button>
+        </form>
+
+        <div class="mt-6 pt-4 border-t border-slate-800 text-center text-sm text-slate-400">
+            Noch kein Gildenmitglied? 
+            <a href="/auth/register" class="text-amber-400 hover:text-amber-300 font-semibold underline">
+                Konto eröffnen
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+[Unit]
+Description=Handelsimperium Idle Trading Game Server
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/handelsimperium
+EnvironmentFile=/opt/handelsimperium/.env
+ExecStart=/opt/handelsimperium/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2 --proxy-headers
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,255 @@
+<!-- Market Order Book Component (HTMX Partial) -->
+<div class="space-y-6">
+    <!-- Out of band update for user balance in navbar -->
+    {% if user %}
+    <span id="user-balance-badge" hx-swap-oob="true" class="font-mono text-amber-300 font-bold">
+        {{ "%.2f"|format(user.balance) }}
+    </span>
+    {% endif %}
+
+    <!-- Alert / Messages -->
+    {% if message %}
+    <div class="p-4 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 text-sm flex items-center justify-between">
+        <span>✨ {{ message }}</span>
+        <button onclick="this.parentElement.remove()" class="text-emerald-500 hover:text-emerald-300">&times;</button>
+    </div>
+    {% endif %}
+    {% if error %}
+    <div class="p-4 rounded-xl bg-red-950/60 border border-red-800/60 text-red-300 text-sm flex items-center justify-between">
+        <span>⚠️ {{ error }}</span>
+        <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-300">&times;</button>
+    </div>
+    {% endif %}
+
+    <!-- Resource Selection Navigation -->
+    <div class="flex items-center space-x-2 overflow-x-auto pb-2 border-b border-slate-800">
+        <span class="text-xs font-semibold uppercase text-slate-400 mr-2">Ware wählen:</span>
+        {% for r in resources %}
+        <button hx-get="/market/book?resource={{ r }}"
+                hx-target="#main-panel"
+                hx-swap="innerHTML"
+                class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition uppercase tracking-wider
+                {% if r == current_resource %}
+                    bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20
+                {% else %}
+                    bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200
+                {% endif %}">
+            {% if r == 'wood' %}🪵 Holz
+            {% elif r == 'stone' %}🪨 Stein
+            {% elif r == 'iron' %}⛓️ Eisen
+            {% elif r == 'grain' %}🌾 Getreide
+            {% elif r == 'cloth' %}🧵 Tuch
+            {% else %}{{ r }}{% endif %}
+        </button>
+        {% endfor %}
+    </div>
+
+    <!-- Grid: Order Creation Form + Order Book Depth -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Order Placement Form (1 Col) -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col justify-between">
+            <div>
+                <h3 class="text-md font-bold text-amber-400 mb-1 flex items-center space-x-2">
+                    <span>✍️</span>
+                    <span>Order aufgeben</span>
+                </h3>
+                <p class="text-xs text-slate-400 mb-4">
+                    Atomares Matching mit 2% Börsengebühr auf ausgeführte Trades.
+                </p>
+
+                <!-- Current Balance / Inventory Context -->
+                <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs mb-4 space-y-1">
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Verfügbare Taler:</span>
+                        <span class="font-mono text-amber-300 font-bold">{{ "%.2f"|format(user.balance) }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Im Lager ({{ current_resource }}):</span>
+                        <span class="font-mono text-slate-200 font-bold">{{ "%.2f"|format(user_inventory) }}</span>
+                    </div>
+                </div>
+
+                <form hx-post="/market/order"
+                      hx-target="#main-panel"
+                      hx-swap="innerHTML"
+                      class="space-y-4">
+                    <input type="hidden" name="resource_type" value="{{ current_resource }}">
+
+                    <!-- BUY / SELL Switch -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Ordertyp</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="flex items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-950 cursor-pointer has-[:checked]:bg-emerald-600/30 has-[:checked]:border-emerald-500 has-[:checked]:text-emerald-300 transition">
+                                <input type="radio" name="order_type" value="BUY" checked class="hidden">
+                                <span class="text-xs font-bold uppercase">Kauf (BUY)</span>
+                            </label>
+                            <label class="flex items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-950 cursor-pointer has-[:checked]:bg-red-600/30 has-[:checked]:border-red-500 has-[:checked]:text-red-300 transition">
+                                <input type="radio" name="order_type" value="SELL" class="hidden">
+                                <span class="text-xs font-bold uppercase">Verkauf (SELL)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Amount -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Menge (Einheiten)</label>
+                        <input type="number" step="1" min="1" max="10000" name="amount" value="10" required
+                               class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 font-mono focus:outline-none focus:border-amber-500 transition">
+                    </div>
+
+                    <!-- Limit Price -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Limitpreis pro Einheit (Taler)</label>
+                        <input type="number" step="0.05" min="0.01" max="10000" name="limit_price" value="5.00" required
+                               class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 font-mono focus:outline-none focus:border-amber-500 transition">
+                    </div>
+
+                    <div class="text-[11px] text-slate-500 italic">
+                        * Bei Kauf wird Treuhandguthaben reserviert. Bei Verkauf werden Rohstoffe im Lager gesperrt.
+                    </div>
+
+                    <button type="submit"
+                            class="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-lg shadow-lg hover:shadow-amber-600/30 transition">
+                        Order einstellen
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Order Book Depth (2 Cols: Asks and Bids) -->
+        <div class="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl space-y-6">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-md font-bold text-slate-200 flex items-center space-x-2">
+                    <span>📖</span>
+                    <span>Orderbuch: <span class="text-amber-400 capitalize">{{ current_resource }}</span></span>
+                </h3>
+                <span class="text-xs text-slate-500">Preispriorität (Bids: Hoch → Tief | Asks: Tief → Hoch)</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Bids (Kaufgesuche) -->
+                <div>
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 flex items-center space-x-1">
+                        <span>🟢 Kaufgebote (Bids)</span>
+                        <span class="text-slate-500 text-[10px]">({{ bids|length }})</span>
+                    </h4>
+                    <div class="bg-slate-950 rounded-lg border border-slate-800/80 overflow-hidden">
+                        <table class="w-full text-xs text-left">
+                            <thead class="bg-slate-900 border-b border-slate-800 text-slate-400">
+                                <tr>
+                                    <th class="py-2 px-3">Preis</th>
+                                    <th class="py-2 px-3 text-right">Menge</th>
+                                    <th class="py-2 px-3 text-right">Typ</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800/40 font-mono">
+                                {% for b in bids %}
+                                <tr class="hover:bg-slate-900/50 transition {% if b.is_own %}bg-amber-950/20 text-amber-300{% endif %}">
+                                    <td class="py-2 px-3 font-bold text-emerald-400">{{ "%.2f"|format(b.limit_price) }}</td>
+                                    <td class="py-2 px-3 text-right text-slate-200">{{ "%.2f"|format(b.amount) }}</td>
+                                    <td class="py-2 px-3 text-right text-[10px] text-slate-400">
+                                        {% if b.is_own %}<span class="text-amber-400 font-bold">Eigene</span>{% else %}Fremd{% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="py-6 text-center text-slate-500 italic">Keine Kaufgebote aktiv</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Asks (Verkaufsangebote) -->
+                <div>
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-2 flex items-center space-x-1">
+                        <span>🔴 Verkaufsangebote (Asks)</span>
+                        <span class="text-slate-500 text-[10px]">({{ asks|length }})</span>
+                    </h4>
+                    <div class="bg-slate-950 rounded-lg border border-slate-800/80 overflow-hidden">
+                        <table class="w-full text-xs text-left">
+                            <thead class="bg-slate-900 border-b border-slate-800 text-slate-400">
+                                <tr>
+                                    <th class="py-2 px-3">Preis</th>
+                                    <th class="py-2 px-3 text-right">Menge</th>
+                                    <th class="py-2 px-3 text-right">Typ</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800/40 font-mono">
+                                {% for a in asks %}
+                                <tr class="hover:bg-slate-900/50 transition {% if a.is_own %}bg-amber-950/20 text-amber-300{% endif %}">
+                                    <td class="py-2 px-3 font-bold text-red-400">{{ "%.2f"|format(a.limit_price) }}</td>
+                                    <td class="py-2 px-3 text-right text-slate-200">{{ "%.2f"|format(a.amount) }}</td>
+                                    <td class="py-2 px-3 text-right text-[10px] text-slate-400">
+                                        {% if a.is_own %}<span class="text-amber-400 font-bold">Eigene</span>{% else %}Fremd{% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="py-6 text-center text-slate-500 italic">Keine Verkaufsangebote aktiv</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User's Active Orders -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl">
+        <h3 class="text-md font-bold text-slate-200 mb-4 flex items-center space-x-2">
+            <span>📋</span>
+            <span>Deine offenen Marktorders</span>
+        </h3>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs font-mono">
+                <thead>
+                    <tr class="border-b border-slate-800 text-slate-400 uppercase tracking-wider font-sans">
+                        <th class="py-2.5 px-3">Order-ID</th>
+                        <th class="py-2.5 px-3">Richtung</th>
+                        <th class="py-2.5 px-3">Offen / Gesamt</th>
+                        <th class="py-2.5 px-3">Limitpreis</th>
+                        <th class="py-2.5 px-3">Erstellt</th>
+                        <th class="py-2.5 px-3 text-right">Aktion</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/60">
+                    {% for mo in my_orders %}
+                    <tr class="hover:bg-slate-800/40 transition">
+                        <td class="py-2.5 px-3 text-slate-400">#{{ mo.id }}</td>
+                        <td class="py-2.5 px-3 font-bold {% if mo.order_type == 'BUY' %}text-emerald-400{% else %}text-red-400{% endif %}">
+                            {{ mo.order_type }}
+                        </td>
+                        <td class="py-2.5 px-3 text-slate-200">{{ "%.2f"|format(mo.remaining) }} / {{ "%.2f"|format(mo.amount) }}</td>
+                        <td class="py-2.5 px-3 text-amber-300 font-bold">{{ "%.2f"|format(mo.limit_price) }} Taler</td>
+                        <td class="py-2.5 px-3 text-slate-500">{{ mo.created_at.strftime('%H:%M:%S') }}</td>
+                        <td class="py-2.5 px-3 text-right">
+                            <form hx-post="/market/cancel"
+                                  hx-target="#main-panel"
+                                  hx-swap="innerHTML"
+                                  class="inline-block">
+                                <input type="hidden" name="order_id" value="{{ mo.id }}">
+                                <input type="hidden" name="resource_type" value="{{ current_resource }}">
+                                <button type="submit"
+                                        class="px-2.5 py-1 rounded bg-red-950/60 text-red-400 border border-red-800/50 hover:bg-red-900/60 transition text-[11px]">
+                                    Stornieren
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="py-6 text-center text-slate-500 italic font-sans">
+                            Du hast derzeit keine aktiven Orders im Markt.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
