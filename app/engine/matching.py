@@ -3,6 +3,7 @@ from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.engine.production import calculate_offline_production
 from app.engine.notifications import create_notification
+from app.engine.guilds import has_guild_perk
 
 def place_and_match_order(
     cur,
@@ -114,7 +115,8 @@ def place_and_match_order(
 
             exec_price = float(maker["limit_price"])
             trade_value = round(trade_qty * exec_price, 2)
-            fee = round(trade_value * settings.MARKET_FEE_RATE, 2)
+            seller_fee_rate = 0.015 if has_guild_perk(cur, seller_id, "FREIHAFEN") else settings.MARKET_FEE_RATE
+            fee = round(trade_value * seller_fee_rate, 2)
             seller_payout = round(trade_value - fee, 2)
 
             # Refund price improvement to buyer if buyer's limit_price was higher
@@ -234,7 +236,8 @@ def place_and_match_order(
 
             exec_price = float(maker["limit_price"])  # Maker price
             trade_value = round(trade_qty * exec_price, 2)
-            fee = round(trade_value * settings.MARKET_FEE_RATE, 2)
+            seller_fee_rate = 0.015 if has_guild_perk(cur, user_id, "FREIHAFEN") else settings.MARKET_FEE_RATE
+            fee = round(trade_value * seller_fee_rate, 2)
             seller_payout = round(trade_value - fee, 2)
 
             # Prevent deadlocks by locking involved accounts in deterministic order (user_id ASC)

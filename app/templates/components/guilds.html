@@ -1,0 +1,406 @@
+<!-- Gilden-Zentrale & Monumente HTMX Partial -->
+<div class="space-y-6">
+    <!-- Out of band update for user balance in navbar -->
+    {% if user %}
+    <span id="user-balance-badge" hx-swap-oob="true" class="font-mono text-amber-300 font-bold">
+        {{ "%.2f"|format(user.balance) }}
+    </span>
+    {% endif %}
+
+    <!-- Alert / Feedback Messages -->
+    {% if message %}
+    <div class="p-4 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 text-sm flex items-center justify-between shadow-lg">
+        <span class="flex items-center space-x-2">
+            <span>✨</span>
+            <span>{{ message }}</span>
+        </span>
+        <button onclick="this.parentElement.remove()" class="text-emerald-500 hover:text-emerald-300 font-bold">&times;</button>
+    </div>
+    {% endif %}
+    {% if error %}
+    <div class="p-4 rounded-xl bg-red-950/60 border border-red-800/60 text-red-300 text-sm flex items-center justify-between shadow-lg">
+        <span class="flex items-center space-x-2">
+            <span>⚠️</span>
+            <span>{{ error }}</span>
+        </span>
+        <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-300 font-bold">&times;</button>
+    </div>
+    {% endif %}
+
+    {% if guild_data %}
+    <!-- AFFILIATED GUILD HALL VIEW -->
+    <div class="bg-gradient-to-r from-slate-900 via-amber-950/30 to-slate-900 border border-amber-500/40 rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div class="space-y-2">
+            <div class="flex items-center space-x-3">
+                <span class="text-3xl">🛡️</span>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h2 class="text-2xl font-black text-amber-400">{{ guild_data.guild.name }}</h2>
+                        <span class="px-2.5 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 font-mono text-xs font-bold border border-amber-500/40">
+                            [{{ guild_data.guild.tag }}]
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-300 mt-0.5">
+                        {{ guild_data.guild.description or "Eine ehrenwerte Kaufmannsallianz der Hanse." }}
+                    </p>
+                </div>
+            </div>
+
+            <!-- Active Perk Badges -->
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+                {% if 'FREIHAFEN' in guild_data.active_perks %}
+                <span class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950/90 text-emerald-300 border border-emerald-700/50 shadow">
+                    <span>⚓</span>
+                    <span>Freihafen: 1,5% Börsengebühr aktiv</span>
+                </span>
+                {% else %}
+                <span class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                    <span>⚓</span>
+                    <span>Freihafen: Im Bau</span>
+                </span>
+                {% endif %}
+
+                {% if 'SPEICHERSTADT' in guild_data.active_perks %}
+                <span class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950/90 text-emerald-300 border border-emerald-700/50 shadow">
+                    <span>🏗️</span>
+                    <span>Speicherstadt: +10% Lagerkapazität aktiv</span>
+                </span>
+                {% else %}
+                <span class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                    <span>🏗️</span>
+                    <span>Speicherstadt: Im Bau</span>
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-4 shrink-0">
+            <!-- Guild Stats Card -->
+            <div class="bg-slate-950/90 border border-slate-800 px-4 py-3 rounded-xl text-right">
+                <span class="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Gildenmeister & Roster</span>
+                <span class="text-sm font-bold text-slate-200 block mt-0.5">
+                    👑 {{ guild_data.guild.leader_name }} · {{ guild_data.member_count }} Mitglieder
+                </span>
+                <span class="text-xs text-amber-400 font-mono block mt-0.5">
+                    Gildenkasse: {{ "%.2f"|format(guild_data.guild.bank_balance) }} Taler
+                </span>
+            </div>
+
+            <!-- Leave Guild Button -->
+            <form hx-post="/guilds/leave"
+                  hx-target="#main-panel"
+                  hx-swap="innerHTML"
+                  hx-confirm="Möchtet Ihr die Gilde wirklich verlassen?{% if guild_data.is_leader %} Als Leiter wird die Führung an den ältesten Gefährten übergeben.{% endif %}">
+                <button type="submit"
+                        class="min-h-[44px] px-3.5 py-2 bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer">
+                    <span>🚪</span>
+                    <span>Gilde verlassen</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cooperative Monuments Section -->
+    <div class="space-y-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl">🏛️</span>
+                <h3 class="text-lg font-bold text-slate-100">Gemeinschaftliche Monumente & Gilden-Buffs</h3>
+            </div>
+            <span class="text-xs text-slate-400">
+                Spendet Baustoffe und Taler, um dauerhafte Boni für alle Mitglieder freizuschalten.
+            </span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {% for m in guild_data.monuments %}
+            <div class="bg-slate-900/90 border {% if m.is_completed %}border-emerald-600/50 bg-emerald-950/10{% else %}border-slate-800{% endif %} rounded-2xl p-6 shadow-xl flex flex-col justify-between space-y-4">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full
+                            {% if m.is_completed %}
+                                bg-emerald-950/80 text-emerald-300 border border-emerald-700/50
+                            {% else %}
+                                bg-amber-950/80 text-amber-300 border border-amber-600/50
+                            {% endif %}">
+                            {% if m.is_completed %}
+                                🏆 Vollendet · Perk Dauerhaft Aktiv
+                            {% else %}
+                                🔨 Baufortschritt {{ m.overall_pct }}%
+                            {% endif %}
+                        </span>
+                        <span class="text-2xl">
+                            {% if m.project_type == 'FREIHAFEN' %}⚓{% else %}🏗️{% endif %}
+                        </span>
+                    </div>
+
+                    <h4 class="text-base font-bold text-slate-100">{{ m.name }}</h4>
+                    <p class="text-xs text-slate-300 mt-1 leading-relaxed">{{ m.description }}</p>
+
+                    <!-- Overall Progress Bar -->
+                    <div class="mt-4 space-y-1.5">
+                        <div class="flex justify-between text-xs text-slate-400">
+                            <span>Gesamtfertigstellung</span>
+                            <span class="font-mono font-bold text-amber-400">{{ m.overall_pct }}%</span>
+                        </div>
+                        <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+                            <div class="{% if m.is_completed %}bg-emerald-500{% else %}bg-amber-500{% endif %} h-2 rounded-full transition-all duration-500"
+                                 style="width: {{ m.overall_pct }}%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Material Requirements Breakdown -->
+                    <div class="mt-4 bg-slate-950 rounded-xl p-3.5 border border-slate-800 space-y-2 text-xs">
+                        <span class="text-[11px] uppercase font-bold text-slate-400 block tracking-wider mb-1">
+                            Baukosten & Rohstofflager
+                        </span>
+                        {% for r in m.resources %}
+                        <div class="space-y-1">
+                            <div class="flex justify-between items-center text-slate-300">
+                                <span class="capitalize flex items-center space-x-1.5">
+                                    <span>
+                                        {% if r.resource == 'wood' %}🪵
+                                        {% elif r.resource == 'stone' %}🪨
+                                        {% elif r.resource == 'iron' %}⛓️
+                                        {% elif r.resource == 'cloth' %}🧵
+                                        {% elif r.resource == 'balance' %}🪙
+                                        {% else %}📦{% endif %}
+                                    </span>
+                                    <span>{% if r.resource == 'balance' %}Taler{% else %}{{ r.resource }}{% endif %}</span>
+                                </span>
+                                <span class="font-mono text-slate-400">
+                                    <span class="{% if r.remaining == 0 %}text-emerald-400 font-bold{% else %}text-slate-200{% endif %}">
+                                        {{ "%.1f"|format(r.invested) }}
+                                    </span> / {{ "%.1f"|format(r.target) }}
+                                    {% if r.remaining > 0 %}
+                                    <span class="text-slate-500 text-[10px]">(fehlt: {{ "%.1f"|format(r.remaining) }})</span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                                <div class="{% if r.remaining == 0 %}bg-emerald-500{% else %}bg-amber-600{% endif %} h-1.5 rounded-full"
+                                     style="width: {{ r.pct }}%"></div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Contribution Controls -->
+                {% if not m.is_completed %}
+                <div class="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3">
+                    <form hx-post="/guilds/projects/{{ m.id }}/contribute"
+                          hx-target="#main-panel"
+                          hx-swap="innerHTML"
+                          class="flex flex-col sm:flex-row items-center gap-2">
+                        <select name="resource_type" class="w-full sm:w-auto bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 focus:ring-amber-500 focus:border-amber-500">
+                            {% for r in m.resources %}
+                            {% if r.remaining > 0 %}
+                            <option value="{{ r.resource }}">
+                                {% if r.resource == 'balance' %}🪙 Taler (Vorrat: {{ "%.2f"|format(user.balance) }}){% else %}📦 {{ r.resource|capitalize }} (Vorrat: {{ "%.1f"|format(inv_map.get(r.resource, 0.0)) }}){% endif %}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+
+                        <input type="number"
+                               name="amount"
+                               step="1"
+                               min="1"
+                               placeholder="Menge"
+                               required
+                               class="w-full sm:w-28 bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 font-mono focus:ring-amber-500 focus:border-amber-500">
+
+                        <button type="submit"
+                                class="w-full sm:w-auto min-h-[38px] px-4 py-2 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-lg text-xs shadow transition flex items-center justify-center space-x-1 cursor-pointer">
+                            <span>🔨</span>
+                            <span>Spenden</span>
+                        </button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="p-3 bg-emerald-950/40 border border-emerald-800/40 rounded-xl text-center text-xs text-emerald-300 font-semibold flex items-center justify-center space-x-1.5">
+                    <span>✅</span>
+                    <span>Dieses Monument ist vollendet und verleiht allen Gildenmitgliedern seinen Segen.</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Guild Members Roster -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl">📜</span>
+                <h3 class="text-base font-bold text-slate-100">Gildenmitglieder ({{ guild_data.member_count }})</h3>
+            </div>
+            <span class="text-xs text-slate-400">Hanseatischer Kaufmannskonvent</span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead>
+                    <tr class="text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[10px]">
+                        <th class="py-2.5 px-3">Kaufmann</th>
+                        <th class="py-2.5 px-3">Rang</th>
+                        <th class="py-2.5 px-3 text-right">Vermögen</th>
+                        <th class="py-2.5 px-3 text-right">Beigetreten</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/60 font-mono">
+                    {% for mem in guild_data.members %}
+                    <tr class="hover:bg-slate-800/40 transition">
+                        <td class="py-2.5 px-3 font-sans font-medium text-slate-200 flex items-center space-x-1.5">
+                            {% if mem.role == 'LEADER' %}<span>👑</span>{% else %}<span>💼</span>{% endif %}
+                            <span>{{ mem.username }}</span>
+                            {% if mem.user_id == user.id %}
+                            <span class="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-bold font-mono">Du</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-2.5 px-3">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold font-sans
+                                {% if mem.role == 'LEADER' %}bg-amber-950 text-amber-300 border border-amber-600/50
+                                {% else %}bg-slate-800 text-slate-300 border border-slate-700{% endif %}">
+                                {{ mem.role }}
+                            </span>
+                        </td>
+                        <td class="py-2.5 px-3 text-right text-amber-300">
+                            {{ "%.2f"|format(mem.balance) }} Taler
+                        </td>
+                        <td class="py-2.5 px-3 text-right text-slate-400 text-[11px]">
+                            {{ mem.joined_at.strftime('%d.%m.%Y') if mem.joined_at else '-' }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- UNAFFILIATED VIEW: RECRUITMENT & FOUNDING -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Founding Form -->
+        <div class="lg:col-span-1 bg-slate-900/90 border border-amber-500/30 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+            <div class="space-y-4">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">🏛️</span>
+                    <h3 class="text-lg font-black text-amber-400">Gilde gründen</h3>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Etabliert Euer eigenes Hansekontor. Als Gildenmeister leitet Ihr den Bau monumentaler Bauwerke und gewährt Euren Gefährten wertvolle Handelsprivilegien.
+                </p>
+
+                <div class="bg-amber-950/30 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-300 space-y-1">
+                    <div class="flex justify-between font-semibold">
+                        <span>Gründungsgebühr:</span>
+                        <span class="font-mono">500.00 Taler</span>
+                    </div>
+                    <div class="flex justify-between text-slate-400">
+                        <span>Euer Kontostand:</span>
+                        <span class="font-mono {% if user.balance >= 500 %}text-emerald-400{% else %}text-red-400{% endif %}">
+                            {{ "%.2f"|format(user.balance) }} Taler
+                        </span>
+                    </div>
+                </div>
+
+                <form hx-post="/guilds/create"
+                      hx-target="#main-panel"
+                      hx-swap="innerHTML"
+                      class="space-y-3 pt-2 text-xs">
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Gildenname (3-64 Zeichen)</label>
+                        <input type="text"
+                               name="name"
+                               placeholder="z.B. Hansebund Lübeck"
+                               required
+                               minlength="3"
+                               maxlength="64"
+                               class="w-full bg-slate-950 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 focus:ring-amber-500 focus:border-amber-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Gilden-Kürzel (2-6 Zeichen)</label>
+                        <input type="text"
+                               name="tag"
+                               placeholder="z.B. HANSE"
+                               required
+                               minlength="2"
+                               maxlength="6"
+                               class="w-full bg-slate-950 border border-slate-700 text-slate-100 uppercase font-mono rounded-lg px-3 py-2 focus:ring-amber-500 focus:border-amber-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Beschreibung (optional)</label>
+                        <textarea name="description"
+                                  rows="2"
+                                  placeholder="Motto und Ausrichtung der Kaufmannsgilde..."
+                                  class="w-full bg-slate-950 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 focus:ring-amber-500 focus:border-amber-500"></textarea>
+                    </div>
+
+                    <button type="submit"
+                            {% if user.balance < 500 %}disabled{% endif %}
+                            class="w-full min-h-[44px] py-2.5 px-4 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl shadow-lg transition text-xs flex items-center justify-center space-x-1.5 cursor-pointer mt-2">
+                        <span>🏛️</span>
+                        <span>Gilde für 500 Taler gründen</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Guild Recruitment Directory -->
+        <div class="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="flex items-center space-x-2">
+                    <span class="text-xl">🤝</span>
+                    <h3 class="text-base font-bold text-slate-100">Bestehende Kaufmannsgilden</h3>
+                </div>
+                <span class="text-xs text-slate-400">Offene Handelsbündnisse</span>
+            </div>
+
+            {% if all_guilds and all_guilds|length > 0 %}
+            <div class="space-y-3">
+                {% for g in all_guilds %}
+                <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-700 transition">
+                    <div class="space-y-1">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-sm text-slate-100">{{ g.name }}</span>
+                            <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold border border-amber-500/40">
+                                [{{ g.tag }}]
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-400">{{ g.description or "Hanseatische Gilde." }}</p>
+                        <div class="flex items-center space-x-3 text-[11px] text-slate-500 pt-1">
+                            <span>👑 Meister: {{ g.leader_name }}</span>
+                            <span>👥 {{ g.member_count }} Mitglieder</span>
+                            {% if g.completed_monuments and g.completed_monuments|length > 0 %}
+                            <span class="text-emerald-400 font-semibold">✨ {{ g.completed_monuments|length }} Monument(e)</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <form hx-post="/guilds/{{ g.id }}/join"
+                          hx-target="#main-panel"
+                          hx-swap="innerHTML">
+                        <button type="submit"
+                                class="w-full sm:w-auto min-h-[40px] px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-400 hover:text-amber-300 font-bold rounded-xl text-xs transition flex items-center justify-center space-x-1 cursor-pointer">
+                            <span>🤝</span>
+                            <span>Beitreten</span>
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="p-8 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl space-y-2">
+                <span class="text-2xl block">🏰</span>
+                <p class="font-semibold text-slate-400">Bisher wurden keine Kaufmannsgilden gegründet.</p>
+                <p>Seid der Erste und gründet das mächtigste Bündnis der Hanse!</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>

@@ -13,6 +13,7 @@ from app.routes.trades import router as trades_router
 from app.routes.ranking import router as ranking_router
 from app.routes.notifications import router as notifications_router
 from app.routes.contracts import router as contracts_router
+from app.routes.guilds import router as guilds_router
 from app.routes.admin import router as admin_router
 import os
 
@@ -49,6 +50,7 @@ app.include_router(trades_router)
 app.include_router(ranking_router)
 app.include_router(notifications_router)
 app.include_router(contracts_router)
+app.include_router(guilds_router)
 app.include_router(admin_router)
 
 @app.get("/health")

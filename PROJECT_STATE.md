@@ -1,8 +1,8 @@
 # Project State: Handelsimperium
 
-**Generated:** 2026-09-12T22:05:00+02:00  
+**Generated:** 2026-09-12T22:12:00+02:00  
 **Repository Branch:** `master`  
-**Current Phase:** Phase 5 (Export Contracts, Notifications, Telemetry, and State Persistence)  
+**Current Phase:** Phase 6 (Merchant Guilds, Cooperative Monuments & Alliance Buffs)  
 **Production Host:** `80.158.79.44` (`ssh server`)  
 **Public Endpoint:** [http://80.158.79.44/](http://80.158.79.44/)
 
@@ -88,7 +88,7 @@
 ### 2.7 `notifications` (Phase 5)
 - `id`: `SERIAL PRIMARY KEY`
 - `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
-- `event_type`: `VARCHAR(32) NOT NULL` (`TRADE_EXECUTED`, `CONTRACT_FULFILLED`, `STORAGE_OVERFLOW`)
+- `event_type`: `VARCHAR(32) NOT NULL` (`TRADE_EXECUTED`, `CONTRACT_FULFILLED`, `STORAGE_OVERFLOW`, `GUILD_CREATED`, `GUILD_JOINED`, `MONUMENT_COMPLETED`)
 - `payload`: `JSONB NOT NULL DEFAULT '{}'::jsonb`
 - `is_read`: `BOOLEAN NOT NULL DEFAULT FALSE`
 - `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
@@ -109,16 +109,54 @@
 - *Constraints:* `UNIQUE(user_id, contract_date, resource_type)`
 - *Index:* `idx_export_contracts_user_date ON (user_id, contract_date, status)`
 
+### 2.9 `guilds` (Phase 6)
+- `id`: `SERIAL PRIMARY KEY`
+- `name`: `VARCHAR(64) UNIQUE NOT NULL`
+- `tag`: `VARCHAR(6) UNIQUE NOT NULL`
+- `description`: `TEXT`
+- `leader_id`: `INT NOT NULL REFERENCES users(id)`
+- `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- *Index:* `idx_guilds_leader ON (leader_id)`
+
+### 2.10 `guild_members` (Phase 6)
+- `id`: `SERIAL PRIMARY KEY`
+- `guild_id`: `INT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE`
+- `user_id`: `INT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE`
+- `role`: `VARCHAR(16) NOT NULL DEFAULT 'MEMBER'` (`LEADER`, `OFFICER`, `MEMBER`)
+- `joined_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- *Index:* `idx_guild_members_user ON (user_id)`
+- *Index:* `idx_guild_members_guild ON (guild_id)`
+
+### 2.11 `guild_bank` & `guild_bank_inventory` (Phase 6)
+- `guild_bank.guild_id`: `INT PRIMARY KEY REFERENCES guilds(id) ON DELETE CASCADE`
+- `guild_bank.balance`: `NUMERIC(14, 2) NOT NULL DEFAULT 0.0`
+- `guild_bank_inventory`: `(guild_id INT, resource_type VARCHAR(32), amount NUMERIC(14, 2) DEFAULT 0.0)`
+- *Constraint:* `PRIMARY KEY (guild_id, resource_type)`
+
+### 2.12 `guild_projects` (Phase 6)
+- `id`: `SERIAL PRIMARY KEY`
+- `guild_id`: `INT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE`
+- `project_type`: `VARCHAR(32) NOT NULL` (`FREIHAFEN`, `SPEICHERSTADT`)
+- `stage`: `INT NOT NULL DEFAULT 1`
+- `target_costs`: `JSONB NOT NULL`
+- `invested_resources`: `JSONB NOT NULL DEFAULT '{}'::jsonb`
+- `is_completed`: `BOOLEAN NOT NULL DEFAULT FALSE`
+- `completed_at`: `TIMESTAMPTZ`
+- *Constraints:* `UNIQUE(guild_id, project_type)`
+- *Index:* `idx_guild_projects_lookup ON (guild_id, is_completed)`
+- *Index:* `idx_guild_projects_perk ON (guild_id, project_type, is_completed)`
+
 ---
 
 ## 3. Core Economic Equations
 
 ### 3.1 On-Demand Offline Production
 $$\Delta t = T_{now} - \text{last\_calculated\_at}$$
-$$\text{amount}_{new} = \min(\text{storage\_cap}, \text{amount}_{old} + (\Delta t \times \text{production\_rate}))$$
+$$\text{amount}_{new} = \min(\text{storage\_cap}_{\text{effective}}, \text{amount}_{old} + (\Delta t \times \text{production\_rate}))$$
 
-### 3.2 Warehouse Storage Scaling
-$$\text{storage\_cap}(\text{level}) = \text{round}(1000.0 \times 1.5^{\text{level} - 1})$$
+### 3.2 Warehouse Storage Scaling & Guild Speicherstadt Buff
+$$\text{storage\_cap}_{\text{base}}(\text{level}) = \text{round}(1000.0 \times 1.5^{\text{level} - 1})$$
+$$\text{storage\_cap}_{\text{effective}} = \begin{cases} \text{round}(\text{storage\_cap}_{\text{base}} \times 1.10) & \text{if member has active } \text{SPEICHERSTADT} \\ \text{storage\_cap}_{\text{base}} & \text{otherwise} \end{cases}$$
 
 ### 3.3 Building Upgrade Cost Scaling
 $$\text{cost}_i(\text{level}) = \text{round}(\text{base\_cost}_i \times 1.5^{\text{level} - 1}, 2)$$
@@ -132,9 +170,11 @@ $$\text{VWAP}_{24h}(r) = \frac{\sum_{t \in \text{Trades}_{24h}(r)} (\text{amount
 $$\text{Net Worth} = \text{Liquid Balance} + \sum_{r} (\text{inventory}_r \times \text{Price}(r)) + \sum_{b} \text{SunkCapital}(b, L)$$
 $$\text{SunkCapital}(b, L) = \sum_{k=1}^{L-1} \left[ \text{cost}_{\text{balance}}(b, k) + \sum_{r} (\text{cost}_{r}(b, k) \times \text{Price}(r)) \right]$$
 
-### 3.6 Deflationary Sinks
-- **Market Fee:** $2\%$ deduced on executed maker/taker matches, burned permanently from circulation.
+### 3.6 Deflationary Sinks & Transaction Taxes
+- **Standard Market Fee:** $2.0\%$ deducted on executed maker/taker matches, burned permanently from circulation.
+- **Alliance Freihafen Perk:** Reduces seller market fee down to $1.5\%$ if the seller's guild has completed the `FREIHAFEN` monument.
 - **Export Contracts ("Handelskarawanen"):** 3 daily contracts expiring midnight UTC; consumed resources are permanently deleted from circulation in exchange for guaranteed Taler payouts.
+- **Guild Founding Fee:** $500.00$ Taler permanently deducted upon founding an alliance.
 
 ---
 
@@ -171,14 +211,24 @@ $$\text{SunkCapital}(b, L) = \sum_{k=1}^{L-1} \left[ \text{cost}_{\text{balance}
 - `POST /notifications/read-all` (Mark all notifications read)
 - `GET /admin/economy` (HTTP Basic Auth macro-economic telemetry)
 
+### Phase 6: Merchant Guilds, Cooperative Monuments & Alliance Buffs
+- `GET /guilds` (Guild Hall for members, recruitment directory and founding form for unaffiliated)
+- `POST /guilds/create` (Found guild for 500 Taler, sets creator as `LEADER`)
+- `POST /guilds/{id}/join` (Join open merchant alliance)
+- `POST /guilds/leave` (Leave guild with automatic leadership succession)
+- `POST /guilds/projects/{id}/contribute` (Atomic resource & Taler contribution to monuments)
+- Cooperative Monument Perks:
+  - `FREIHAFEN`: Market trading fee reduced from 2.0% to 1.5% for all guild members.
+  - `SPEICHERSTADT`: +10% flat storage capacity on all warehouse levels for all guild members.
+
 ---
 
 ## 5. Test Suite Metrics
 
 All tests execute cleanly directly against PostgreSQL on the production server:
-- **Total Test Files:** 6
-- **Total Tests:** 27
-- **Pass Rate:** 100% (27 passed in 7.32s)
+- **Total Test Files:** 7
+- **Total Tests:** 32
+- **Pass Rate:** 100% (32 passed in 7.43s)
 
 | Test File | Tests | Coverage Scope |
 | :--- | :--- | :--- |
@@ -188,6 +238,7 @@ All tests execute cleanly directly against PostgreSQL on the production server:
 | `tests/test_phase3_features.py` | 6 | Offline catch-up, VWAP metrics, order input validation, rate limiter, seeder |
 | `tests/test_phase4_features.py` | 5 | Net worth math, capital conservation, ranking cache, CSRF middleware, PWA assets |
 | `tests/test_phase5_features.py` | 4 | Export contracts, trade notification dispatch, economic telemetry, HTMX flow |
+| `tests/test_phase6_guilds.py` | 5 | Guild founding, succession, monument contributions, Freihafen fee perk, Speicherstadt cap perk, HTMX flow |
 | `tests/test_production.py` | 2 | Offline production delta calculation and storage cap enforcement |
 | `tests/test_progression_and_cancel.py` | 5 | Multi-resource upgrade sufficiency/rollback, warehouse cap, aggregated depth |
 
@@ -195,7 +246,7 @@ All tests execute cleanly directly against PostgreSQL on the production server:
 
 ## 6. Outstanding Backlog & Roadmap
 
-1. **Merchant Guilds (Alliances):** Shared guild treasury, collective guild projects, and cooperative trade pacts.
+1. **Regional Trade Routes & Travel Delays:** Multi-city map with geographic distance, caravan travel time, and regional price arbitrage.
 2. **Dynamic Price Bands & Volatility Limits:** Circuit breakers preventing drastic market manipulation during sudden low-liquidity shocks.
-3. **Regional Trade Routes & Travel Delays:** Multi-city map with geographic distance, caravan travel time, and regional price arbitrage.
+3. **Guild Treasury War Chest & Territory Auctions:** Alliances bid on regional trading posts and port monopolies.
 4. **Automated Continuous Integration (CI):** GitHub Actions workflow running `pytest` against test PostgreSQL containers on pull requests.

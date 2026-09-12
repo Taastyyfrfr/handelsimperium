@@ -30,6 +30,19 @@ def get_storage_cap(warehouse_level: int) -> float:
     """Calculates max storage capacity per resource determined by warehouse level."""
     return float(round(settings.BASE_STORAGE_CAP * (1.5 ** (max(1, warehouse_level) - 1)), 0))
 
+def get_effective_storage_cap(cur, user_id: Optional[int], warehouse_level: int) -> float:
+    """
+    Calculates max storage capacity per resource, adding a +10% flat bonus if the merchant's
+    guild has completed the 'SPEICHERSTADT' cooperative monument perk.
+    """
+    base_cap = get_storage_cap(warehouse_level)
+    if cur and user_id:
+        from app.engine.guilds import has_guild_perk
+        if has_guild_perk(cur, user_id, "SPEICHERSTADT"):
+            return float(round(base_cap * 1.10, 0))
+    return base_cap
+
+
 def get_upgrade_costs(building_type: str, current_level: int) -> Dict[str, float]:
     """Calculates multi-resource upgrade costs scaling deterministically with cost = base_cost * 1.5^(level-1)."""
     cfg = BUILDING_CONFIG.get(building_type, {})
@@ -116,10 +129,10 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
     )
     building_rows = {r["building_type"]: r for r in cur.fetchall()}
     
-    # Storage cap is dictated by the player's warehouse building level
+    # Storage cap is dictated by the player's warehouse building level and active guild perks
     warehouse_info = building_rows.get("warehouse")
     warehouse_level = warehouse_info["level"] if warehouse_info else 1
-    storage_cap = get_storage_cap(warehouse_level)
+    storage_cap = get_effective_storage_cap(cur, user_id, warehouse_level)
     
     updated_inventories = []
     production_delta_map = {}
@@ -286,8 +299,8 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
             "level": lvl,
             "production_rate": round(rate, 4),
             "is_warehouse": b_type == "warehouse",
-            "storage_cap": get_storage_cap(lvl) if b_type == "warehouse" else storage_cap,
-            "next_storage_cap": get_storage_cap(lvl + 1) if b_type == "warehouse" else None,
+            "storage_cap": get_effective_storage_cap(cur, user_id, lvl) if b_type == "warehouse" else storage_cap,
+            "next_storage_cap": get_effective_storage_cap(cur, user_id, lvl + 1) if b_type == "warehouse" else None,
             "upgrade_costs": upgrade_costs,
         })
     
@@ -403,7 +416,7 @@ def upgrade_building(cur, user_id: int, building_id_or_type: Union[int, str]) ->
     new_level = current_level + 1
     if b_type == "warehouse":
         new_rate = 0.0
-        new_cap = get_storage_cap(new_level)
+        new_cap = get_effective_storage_cap(cur, user_id, new_level)
     else:
         base_rate = BUILDING_CONFIG[b_type]["base_rate"]
         new_rate = round(base_rate * (1.25 ** (new_level - 1)), 4)

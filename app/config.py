@@ -132,3 +132,32 @@ BUILDING_CONFIG = {
 }
 
 SUPPORTED_RESOURCES = ["wood", "stone", "iron", "grain", "cloth"]
+
+# Guild settings & Cooperative Monument configurations
+GUILD_CREATION_FEE: float = 500.00
+
+GUILD_PROJECT_CONFIG = {
+    "FREIHAFEN": {
+        "name": "Großer Freihafen",
+        "description": "Errichtet Zollfreizonen an den Kais. Senkt die Börsen-Handelsgebühr für alle Gildenmitglieder von 2,0% auf 1,5%.",
+        "perk_type": "FREIHAFEN",
+        "target_costs": {
+            "wood": 150.0,
+            "stone": 100.0,
+            "cloth": 50.0,
+            "balance": 300.0,
+        },
+    },
+    "SPEICHERSTADT": {
+        "name": "Monumentale Speicherstadt",
+        "description": "Errichtet gigantische Backsteinspeicher für die Kaufmannsgilde. Erhöht die Lagerkapazität aller Gildenmitglieder um +10%.",
+        "perk_type": "SPEICHERSTADT",
+        "target_costs": {
+            "wood": 100.0,
+            "stone": 200.0,
+            "iron": 50.0,
+            "balance": 300.0,
+        },
+    },
+}
+
