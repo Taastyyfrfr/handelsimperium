@@ -44,7 +44,7 @@
         {% endfor %}
     </div>
 
-    <!-- Grid: Order Creation Form + Order Book Depth -->
+    <!-- Grid: Order Creation Form + Aggregated Order Book Depth -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Order Placement Form (1 Col) -->
         <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col justify-between">
@@ -116,44 +116,52 @@
             </div>
         </div>
 
-        <!-- Order Book Depth (2 Cols: Asks and Bids) -->
+        <!-- Aggregated Order Book Depth (2 Cols: Asks and Bids) -->
         <div class="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl space-y-6">
             <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 class="text-md font-bold text-slate-200 flex items-center space-x-2">
-                    <span>📖</span>
-                    <span>Orderbuch: <span class="text-amber-400 capitalize">{{ current_resource }}</span></span>
-                </h3>
-                <span class="text-xs text-slate-500">Preispriorität (Bids: Hoch → Tief | Asks: Tief → Hoch)</span>
+                <div>
+                    <h3 class="text-md font-bold text-slate-200 flex items-center space-x-2">
+                        <span>📖</span>
+                        <span>Orderbuch & Aggregierte Markttiefe: <span class="text-amber-400 capitalize">{{ current_resource }}</span></span>
+                    </h3>
+                    <p class="text-[11px] text-slate-500 mt-0.5">Volumen kombiniert nach Preisstufen (Preispriorität)</p>
+                </div>
+                <button hx-get="/market/book?resource={{ current_resource }}"
+                        hx-target="#main-panel"
+                        hx-swap="innerHTML"
+                        class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+                    🔄 Aktualisieren
+                </button>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Bids (Kaufgesuche) -->
+                <!-- Bids (Kaufgebote - Aggregiert) -->
                 <div>
-                    <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 flex items-center space-x-1">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 flex items-center justify-between">
                         <span>🟢 Kaufgebote (Bids)</span>
-                        <span class="text-slate-500 text-[10px]">({{ bids|length }})</span>
+                        <span class="text-slate-500 text-[10px]">{{ bids|length }} Preisstufen</span>
                     </h4>
                     <div class="bg-slate-950 rounded-lg border border-slate-800/80 overflow-hidden">
                         <table class="w-full text-xs text-left">
-                            <thead class="bg-slate-900 border-b border-slate-800 text-slate-400">
+                            <thead class="bg-slate-900 border-b border-slate-800 text-slate-400 font-sans">
                                 <tr>
                                     <th class="py-2 px-3">Preis</th>
-                                    <th class="py-2 px-3 text-right">Menge</th>
-                                    <th class="py-2 px-3 text-right">Typ</th>
+                                    <th class="py-2 px-3 text-right">Volumen</th>
+                                    <th class="py-2 px-3 text-right">Orders</th>
+                                    <th class="py-2 px-3 text-right">Kumuliert</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-800/40 font-mono">
                                 {% for b in bids %}
-                                <tr class="hover:bg-slate-900/50 transition {% if b.is_own %}bg-amber-950/20 text-amber-300{% endif %}">
+                                <tr class="hover:bg-slate-900/50 transition {% if b.has_own %}bg-amber-950/20 text-amber-300 border-l-2 border-amber-500{% endif %}">
                                     <td class="py-2 px-3 font-bold text-emerald-400">{{ "%.2f"|format(b.limit_price) }}</td>
-                                    <td class="py-2 px-3 text-right text-slate-200">{{ "%.2f"|format(b.amount) }}</td>
-                                    <td class="py-2 px-3 text-right text-[10px] text-slate-400">
-                                        {% if b.is_own %}<span class="text-amber-400 font-bold">Eigene</span>{% else %}Fremd{% endif %}
-                                    </td>
+                                    <td class="py-2 px-3 text-right text-slate-200">{{ "%.2f"|format(b.total_amount) }}</td>
+                                    <td class="py-2 px-3 text-right text-[11px] text-slate-400">{{ b.order_count }}</td>
+                                    <td class="py-2 px-3 text-right text-slate-400 text-[11px]">{{ "%.2f"|format(b.cumulative_amount) }}</td>
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="3" class="py-6 text-center text-slate-500 italic">Keine Kaufgebote aktiv</td>
+                                    <td colspan="4" class="py-6 text-center text-slate-500 italic font-sans">Keine Kaufgebote aktiv</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -161,33 +169,33 @@
                     </div>
                 </div>
 
-                <!-- Asks (Verkaufsangebote) -->
+                <!-- Asks (Verkaufsangebote - Aggregiert) -->
                 <div>
-                    <h4 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-2 flex items-center space-x-1">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-2 flex items-center justify-between">
                         <span>🔴 Verkaufsangebote (Asks)</span>
-                        <span class="text-slate-500 text-[10px]">({{ asks|length }})</span>
+                        <span class="text-slate-500 text-[10px]">{{ asks|length }} Preisstufen</span>
                     </h4>
                     <div class="bg-slate-950 rounded-lg border border-slate-800/80 overflow-hidden">
                         <table class="w-full text-xs text-left">
-                            <thead class="bg-slate-900 border-b border-slate-800 text-slate-400">
+                            <thead class="bg-slate-900 border-b border-slate-800 text-slate-400 font-sans">
                                 <tr>
                                     <th class="py-2 px-3">Preis</th>
-                                    <th class="py-2 px-3 text-right">Menge</th>
-                                    <th class="py-2 px-3 text-right">Typ</th>
+                                    <th class="py-2 px-3 text-right">Volumen</th>
+                                    <th class="py-2 px-3 text-right">Orders</th>
+                                    <th class="py-2 px-3 text-right">Kumuliert</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-800/40 font-mono">
                                 {% for a in asks %}
-                                <tr class="hover:bg-slate-900/50 transition {% if a.is_own %}bg-amber-950/20 text-amber-300{% endif %}">
+                                <tr class="hover:bg-slate-900/50 transition {% if a.has_own %}bg-amber-950/20 text-amber-300 border-l-2 border-amber-500{% endif %}">
                                     <td class="py-2 px-3 font-bold text-red-400">{{ "%.2f"|format(a.limit_price) }}</td>
-                                    <td class="py-2 px-3 text-right text-slate-200">{{ "%.2f"|format(a.amount) }}</td>
-                                    <td class="py-2 px-3 text-right text-[10px] text-slate-400">
-                                        {% if a.is_own %}<span class="text-amber-400 font-bold">Eigene</span>{% else %}Fremd{% endif %}
-                                    </td>
+                                    <td class="py-2 px-3 text-right text-slate-200">{{ "%.2f"|format(a.total_amount) }}</td>
+                                    <td class="py-2 px-3 text-right text-[11px] text-slate-400">{{ a.order_count }}</td>
+                                    <td class="py-2 px-3 text-right text-slate-400 text-[11px]">{{ "%.2f"|format(a.cumulative_amount) }}</td>
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="3" class="py-6 text-center text-slate-500 italic">Keine Verkaufsangebote aktiv</td>
+                                    <td colspan="4" class="py-6 text-center text-slate-500 italic font-sans">Keine Verkaufsangebote aktiv</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -198,44 +206,64 @@
         </div>
     </div>
 
-    <!-- User's Active Orders -->
-    <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl">
-        <h3 class="text-md font-bold text-slate-200 mb-4 flex items-center space-x-2">
-            <span>📋</span>
-            <span>Deine offenen Marktorders</span>
-        </h3>
+    <!-- Active Orders Management Section -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl" id="my-active-orders-panel">
+        <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
+            <h3 class="text-md font-bold text-slate-200 flex items-center space-x-2">
+                <span>📋</span>
+                <span>Meine offenen Marktorders</span>
+                <span class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 font-mono">{{ my_orders|length }}</span>
+            </h3>
+            <span class="text-xs text-slate-500">Stornierungen geben Treuhandmittel sofort und vollständig frei</span>
+        </div>
 
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs font-mono">
                 <thead>
                     <tr class="border-b border-slate-800 text-slate-400 uppercase tracking-wider font-sans">
                         <th class="py-2.5 px-3">Order-ID</th>
+                        <th class="py-2.5 px-3">Ware</th>
                         <th class="py-2.5 px-3">Richtung</th>
                         <th class="py-2.5 px-3">Offen / Gesamt</th>
                         <th class="py-2.5 px-3">Limitpreis</th>
+                        <th class="py-2.5 px-3">Treuhandwert</th>
                         <th class="py-2.5 px-3">Erstellt</th>
                         <th class="py-2.5 px-3 text-right">Aktion</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800/60">
                     {% for mo in my_orders %}
-                    <tr class="hover:bg-slate-800/40 transition">
+                    <tr class="hover:bg-slate-800/40 transition {% if mo.is_current_resource %}bg-slate-800/20{% endif %}" id="order-row-{{ mo.id }}">
                         <td class="py-2.5 px-3 text-slate-400">#{{ mo.id }}</td>
+                        <td class="py-2.5 px-3 uppercase font-bold text-amber-300 font-sans">
+                            {% if mo.resource_type == 'wood' %}🪵 Holz
+                            {% elif mo.resource_type == 'stone' %}🪨 Stein
+                            {% elif mo.resource_type == 'iron' %}⛓️ Eisen
+                            {% elif mo.resource_type == 'grain' %}🌾 Getreide
+                            {% elif mo.resource_type == 'cloth' %}🧵 Tuch
+                            {% else %}{{ mo.resource_type }}{% endif %}
+                        </td>
                         <td class="py-2.5 px-3 font-bold {% if mo.order_type == 'BUY' %}text-emerald-400{% else %}text-red-400{% endif %}">
                             {{ mo.order_type }}
                         </td>
                         <td class="py-2.5 px-3 text-slate-200">{{ "%.2f"|format(mo.remaining) }} / {{ "%.2f"|format(mo.amount) }}</td>
                         <td class="py-2.5 px-3 text-amber-300 font-bold">{{ "%.2f"|format(mo.limit_price) }} Taler</td>
+                        <td class="py-2.5 px-3 text-slate-300">
+                            {% if mo.order_type == 'BUY' %}
+                                {{ "%.2f"|format(mo.total_value) }} Taler
+                            {% else %}
+                                {{ "%.2f"|format(mo.remaining) }} {{ mo.resource_type }}
+                            {% endif %}
+                        </td>
                         <td class="py-2.5 px-3 text-slate-500">{{ mo.created_at.strftime('%H:%M:%S') }}</td>
                         <td class="py-2.5 px-3 text-right">
-                            <form hx-post="/market/cancel"
+                            <form hx-post="/market/orders/{{ mo.id }}/cancel"
                                   hx-target="#main-panel"
                                   hx-swap="innerHTML"
                                   class="inline-block">
-                                <input type="hidden" name="order_id" value="{{ mo.id }}">
                                 <input type="hidden" name="resource_type" value="{{ current_resource }}">
                                 <button type="submit"
-                                        class="px-2.5 py-1 rounded bg-red-950/60 text-red-400 border border-red-800/50 hover:bg-red-900/60 transition text-[11px]">
+                                        class="px-2.5 py-1 rounded bg-red-950/60 text-red-400 border border-red-800/50 hover:bg-red-900/60 transition text-[11px] cursor-pointer">
                                     Stornieren
                                 </button>
                             </form>
@@ -243,7 +271,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="6" class="py-6 text-center text-slate-500 italic font-sans">
+                        <td colspan="8" class="py-6 text-center text-slate-500 italic font-sans">
                             Du hast derzeit keine aktiven Orders im Markt.
                         </td>
                     </tr>

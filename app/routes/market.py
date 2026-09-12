@@ -109,13 +109,17 @@ def create_market_order(
         },
     )
 
+@router.post("/orders/{order_id}/cancel", response_class=HTMLResponse)
 @router.post("/cancel", response_class=HTMLResponse)
 def cancel_market_order(
     request: Request,
-    order_id: int = Form(...),
+    order_id: int,
     resource_type: str = Form("wood"),
     user: dict = Depends(get_current_user),
 ):
+    """
+    Cancels an active limit order and atomically refunds unfulfilled escrowed funds/goods.
+    """
     message = None
     error = None
 
@@ -127,10 +131,19 @@ def cancel_market_order(
             try:
                 res = cancel_order(cur, user["id"], order_id)
                 conn.commit()
-                message = f"Order #{order_id} erfolgreich storniert. Treuhandmittel rückerstattet."
-            except ValueError as e:
+                if res.get("refunded_funds", 0) > 0:
+                    message = f"Kauf-Order #{order_id} storniert. {res['refunded_funds']:.2f} Taler Treuhandguthaben gutgeschrieben."
+                else:
+                    message = f"Verkaufs-Order #{order_id} storniert. {res['refunded_amount']:.2f} {res['resource_type']} dem Lager gutgeschrieben."
+            except PermissionError as pe:
                 conn.rollback()
-                error = str(e)
+                error = str(pe)
+            except ValueError as ve:
+                conn.rollback()
+                error = str(ve)
+            except Exception as e:
+                conn.rollback()
+                error = f"Fehler beim Stornieren: {str(e)}"
 
             calculate_offline_production(cur, user["id"])
             cur.execute("SELECT id, username, balance FROM users WHERE id = %s", (user["id"],))

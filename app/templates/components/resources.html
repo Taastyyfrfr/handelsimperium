@@ -22,17 +22,24 @@
     {% endif %}
 
     <!-- Header Actions & Offline Info -->
-    <div class="flex flex-wrap items-center justify-between bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+    <div class="flex flex-wrap items-center justify-between bg-slate-900/60 p-4 rounded-xl border border-slate-800 gap-4">
         <div>
-            <h2 class="text-lg font-bold text-amber-400">Lagerhaus & Produktion</h2>
-            <p class="text-xs text-slate-400">
-                Offline-Generierung erfolgt deterministisch bei jedem Seitenaufruf anhand von Zeitstempel-Deltas.
+            <div class="flex items-center space-x-3">
+                <h2 class="text-lg font-bold text-amber-400">Lagerhaus & Produktion</h2>
+                {% if storage_cap %}
+                <span class="text-xs px-2.5 py-1 rounded bg-amber-950/70 border border-amber-800/50 text-amber-300 font-mono">
+                    Lagerkapazität: <strong>{{ "%.0f"|format(storage_cap) }}</strong> je Ware (Zentrallager Stufe {{ warehouse_level }})
+                </span>
+                {% endif %}
+            </div>
+            <p class="text-xs text-slate-400 mt-1">
+                Offline-Generierung erfolgt deterministisch bei jedem Aufruf anhand von Zeitstempel-Deltas. Ausbauten verbrauchen Rohstoffe und Taler.
             </p>
         </div>
         <button hx-get="/resources/overview"
                 hx-target="#main-panel"
                 hx-swap="innerHTML"
-                class="mt-2 sm:mt-0 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-600/20 text-amber-300 border border-amber-500/30 hover:bg-amber-600/30 transition flex items-center space-x-1">
+                class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-600/20 text-amber-300 border border-amber-500/30 hover:bg-amber-600/30 transition flex items-center space-x-1">
             <span>🔄 Jetzt Ertrag berechnen</span>
         </button>
     </div>
@@ -59,8 +66,8 @@
                     {{ "%.2f"|format(inv.amount) }}
                 </div>
                 <div class="text-xs text-slate-400 flex justify-between mt-1">
-                    <span>Kapazität:</span>
-                    <span>{{ "%.0f"|format(inv.storage_cap) }}</span>
+                    <span>Lagerlimit:</span>
+                    <span class="font-mono text-slate-300">{{ "%.0f"|format(inv.storage_cap) }}</span>
                 </div>
             </div>
 
@@ -79,11 +86,11 @@
         {% endfor %}
     </div>
 
-    <!-- Production Buildings Section -->
+    <!-- Buildings & Upgrades Section -->
     <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl">
         <h3 class="text-md font-bold text-slate-200 mb-4 flex items-center space-x-2">
             <span>🏭</span>
-            <span>Produktionsbetriebe & Gildenwerkstätten</span>
+            <span>Betriebe, Werkstätten & Lagerhaus</span>
         </h3>
 
         <div class="overflow-x-auto">
@@ -91,37 +98,73 @@
                 <thead>
                     <tr class="border-b border-slate-800 text-slate-400 text-xs uppercase tracking-wider">
                         <th class="py-3 px-4">Betrieb</th>
-                        <th class="py-3 px-4">Erzeugnis</th>
+                        <th class="py-3 px-4">Funktion</th>
                         <th class="py-3 px-4">Stufe</th>
-                        <th class="py-3 px-4">Erzeugungsrate</th>
-                        <th class="py-3 px-4">Lagerkapazität</th>
-                        <th class="py-3 px-4">Ausbaukosten</th>
+                        <th class="py-3 px-4">Effekt</th>
+                        <th class="py-3 px-4">Erforderliche Ausbauressourcen</th>
                         <th class="py-3 px-4 text-right">Aktion</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800/60">
                     {% for b in buildings %}
-                    <tr class="hover:bg-slate-800/40 transition">
-                        <td class="py-3 px-4 font-semibold text-slate-200">{{ b.name }}</td>
-                        <td class="py-3 px-4 capitalize text-slate-300">{{ b.resource }}</td>
-                        <td class="py-3 px-4 font-mono font-bold text-amber-400">Stufe {{ b.level }}</td>
-                        <td class="py-3 px-4 font-mono text-slate-300">{{ (b.production_rate * 60)|round(1) }} / Min</td>
-                        <td class="py-3 px-4 font-mono text-slate-400">{{ "%.0f"|format(b.storage_cap) }} Einheiten</td>
-                        <td class="py-3 px-4 font-mono text-amber-300 font-semibold">{{ "%.2f"|format(b.upgrade_cost) }} Taler</td>
-                        <td class="py-3 px-4 text-right">
-                            <form hx-post="/resources/upgrade"
+                    <tr class="hover:bg-slate-800/40 transition {% if b.is_warehouse %}bg-amber-950/10{% endif %}">
+                        <td class="py-3 px-4">
+                            <div class="font-semibold text-slate-200 flex items-center space-x-2">
+                                <span>
+                                    {% if b.building_type == 'warehouse' %}🏛️
+                                    {% elif b.building_type == 'lumberjack' %}🪵
+                                    {% elif b.building_type == 'quarry' %}🪨
+                                    {% elif b.building_type == 'mine' %}⛏️
+                                    {% elif b.building_type == 'farm' %}🌾
+                                    {% elif b.building_type == 'weaver' %}🧵
+                                    {% else %}🏠{% endif %}
+                                </span>
+                                <span>{{ b.name }}</span>
+                            </div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">{{ b.description }}</div>
+                        </td>
+                        <td class="py-3 px-4 text-slate-300 text-xs">
+                            {% if b.is_warehouse %}
+                                <span class="px-2 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/40">Zentrallager</span>
+                            {% else %}
+                                <span class="capitalize text-slate-300">{{ b.resource }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4 font-mono font-bold text-amber-400 whitespace-nowrap">Stufe {{ b.level }}</td>
+                        <td class="py-3 px-4 font-mono text-xs whitespace-nowrap">
+                            {% if b.is_warehouse %}
+                                <span class="text-amber-300 font-semibold">{{ "%.0f"|format(b.storage_cap) }}</span> Einheiten / Ware
+                                <div class="text-[10px] text-slate-500">→ Nächste: {{ "%.0f"|format(b.next_storage_cap) }}</div>
+                            {% else %}
+                                <span class="text-slate-200 font-semibold">{{ (b.production_rate * 60)|round(1) }}</span> / Min
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4">
+                            <!-- Multi-Resource Requirements Badges -->
+                            <div class="flex flex-wrap gap-1.5 text-xs font-mono">
+                                {% for res_key, res_cost in b.upgrade_costs.items() %}
+                                <span class="px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-slate-300 flex items-center space-x-1">
+                                    <span>
+                                        {% if res_key == 'wood' %}🪵 Holz
+                                        {% elif res_key == 'stone' %}🪨 Stein
+                                        {% elif res_key == 'iron' %}⛓️ Eisen
+                                        {% elif res_key == 'grain' %}🌾 Korn
+                                        {% elif res_key == 'cloth' %}🧵 Tuch
+                                        {% elif res_key == 'balance' %}🪙 Taler
+                                        {% else %}{{ res_key }}{% endif %}:
+                                    </span>
+                                    <span class="font-bold text-amber-400">{{ "%.1f"|format(res_cost) }}</span>
+                                </span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td class="py-3 px-4 text-right whitespace-nowrap">
+                            <form hx-post="/buildings/{{ b.id or b.building_type }}/upgrade"
                                   hx-target="#main-panel"
                                   hx-swap="innerHTML"
                                   class="inline-block">
-                                <input type="hidden" name="building_type" value="{{ b.building_type }}">
                                 <button type="submit"
-                                        {% if user.balance < b.upgrade_cost %}disabled{% endif %}
-                                        class="px-3 py-1.5 text-xs font-bold rounded-lg transition shadow-sm
-                                        {% if user.balance >= b.upgrade_cost %}
-                                            bg-amber-600 hover:bg-amber-500 text-slate-950 cursor-pointer
-                                        {% else %}
-                                            bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700
-                                        {% endif %}">
+                                        class="px-3 py-1.5 text-xs font-bold rounded-lg transition shadow-sm bg-amber-600 hover:bg-amber-500 text-slate-950 cursor-pointer">
                                     Ausbauen
                                 </button>
                             </form>

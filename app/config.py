@@ -13,8 +13,7 @@ class Settings(BaseSettings):
     DB_NAME: str = os.getenv("DB_NAME", "handelsimperium")
     
     MARKET_FEE_RATE: float = 0.02  # 2% market fee
-    BASE_STORAGE_CAP: float = 1000.0  # Base storage capacity per resource
-    STORAGE_CAP_PER_LEVEL: float = 500.0
+    BASE_STORAGE_CAP: float = 1000.0  # Base storage capacity per resource for Level 1 warehouse
 
     @property
     def conn_str(self) -> str:
@@ -22,37 +21,76 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Default building-to-resource mapping and base production rates (per second)
+# Default building definitions with multi-resource upgrade requirements
 BUILDING_CONFIG = {
+    "warehouse": {
+        "resource": None,
+        "name": "Zentrallager",
+        "description": "Erweitert die Lagerkapazität für alle Handelswaren im Kontor.",
+        "base_rate": 0.0,
+        "base_costs": {
+            "wood": 100.0,
+            "stone": 80.0,
+            "iron": 25.0,
+            "balance": 75.0,
+        },
+    },
     "lumberjack": {
         "resource": "wood",
         "name": "Holzfällerhütte",
-        "base_rate": 0.25, # 15 / min
-        "upgrade_cost_base": 50.0,
+        "description": "Schlägt Nutzholz aus den umliegenden Wäldern.",
+        "base_rate": 0.25,  # 15 / min
+        "base_costs": {
+            "wood": 40.0,
+            "stone": 20.0,
+            "balance": 25.0,
+        },
     },
     "quarry": {
         "resource": "stone",
         "name": "Steinbruch",
-        "base_rate": 0.20, # 12 / min
-        "upgrade_cost_base": 75.0,
+        "description": "Baut Bruchstein für Befestigungen und Fundamente ab.",
+        "base_rate": 0.20,  # 12 / min
+        "base_costs": {
+            "wood": 60.0,
+            "stone": 35.0,
+            "balance": 35.0,
+        },
     },
     "mine": {
         "resource": "iron",
         "name": "Eisenmine",
-        "base_rate": 0.10, # 6 / min
-        "upgrade_cost_base": 150.0,
+        "description": "Fördert wertvolles Eisenerz aus den Tiefen des Berges.",
+        "base_rate": 0.10,  # 6 / min
+        "base_costs": {
+            "wood": 80.0,
+            "stone": 60.0,
+            "iron": 20.0,
+            "balance": 50.0,
+        },
     },
     "farm": {
         "resource": "grain",
         "name": "Getreidehof",
-        "base_rate": 0.30, # 18 / min
-        "upgrade_cost_base": 40.0,
+        "description": "Erntet goldenes Korn zur Ernährung der Stadtbevölkerung.",
+        "base_rate": 0.30,  # 18 / min
+        "base_costs": {
+            "wood": 45.0,
+            "stone": 20.0,
+            "balance": 20.0,
+        },
     },
     "weaver": {
         "resource": "cloth",
         "name": "Weberei",
-        "base_rate": 0.08, # 4.8 / min
-        "upgrade_cost_base": 120.0,
+        "description": "Verarbeitet Rohfasern zu kostbarem Tuch für den Fernhandel.",
+        "base_rate": 0.08,  # 4.8 / min
+        "base_costs": {
+            "wood": 50.0,
+            "stone": 30.0,
+            "cloth": 20.0,
+            "balance": 40.0,
+        },
     },
 }
 

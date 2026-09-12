@@ -265,109 +265,155 @@ def place_and_match_order(
 def cancel_order(cur, user_id: int, order_id: int) -> Dict[str, Any]:
     """
     Cancels an active limit order and refunds unfulfilled escrowed funds/goods atomically.
+    Guarantees zero fund leakage using row-level locks.
     """
     cur.execute(
         """
         SELECT id, user_id, order_type, resource_type, amount, filled_amount, limit_price, status
         FROM market_orders
-        WHERE id = %s AND user_id = %s
+        WHERE id = %s
         FOR UPDATE
         """,
-        (order_id, user_id),
+        (order_id,),
     )
     order = cur.fetchone()
     if not order:
         raise ValueError("Order nicht gefunden.")
+    if order["user_id"] != user_id:
+        raise PermissionError("Keine Berechtigung, fremde Orders zu stornieren.")
     if order["status"] != "ACTIVE":
         raise ValueError(f"Order kann nicht storniert werden (Status: {order['status']}).")
 
     unfilled = round(float(order["amount"]) - float(order["filled_amount"]), 2)
     if unfilled <= 0:
         cur.execute("UPDATE market_orders SET status = 'FILLED' WHERE id = %s", (order_id,))
-        return {"success": True, "message": "Order war bereits vollständig ausgeführt."}
+        return {
+            "success": True,
+            "order_id": order_id,
+            "message": "Order war bereits vollständig ausgeführt.",
+            "refunded_amount": 0.0,
+            "refunded_funds": 0.0,
+        }
 
-    # Refund
+    # Atomic Refund with row-level updates
     if order["order_type"] == "BUY":
         refund_funds = round(unfilled * float(order["limit_price"]), 2)
+        cur.execute("SELECT id FROM users WHERE id = %s FOR UPDATE", (user_id,))
         cur.execute("UPDATE users SET balance = balance + %s WHERE id = %s", (refund_funds, user_id))
+        refunded_amount = unfilled
+        refunded_gold = refund_funds
     else:  # SELL
         cur.execute(
             """
-            INSERT INTO inventories (user_id, resource_type, amount, last_calculated_at)
-            VALUES (%s, %s, %s, NOW())
-            ON CONFLICT (user_id, resource_type)
-            DO UPDATE SET amount = inventories.amount + EXCLUDED.amount
+            UPDATE inventories
+            SET amount = amount + %s
+            WHERE user_id = %s AND resource_type = %s
             """,
-            (user_id, order["resource_type"], unfilled),
+            (unfilled, user_id, order["resource_type"]),
         )
+        refunded_amount = unfilled
+        refunded_gold = 0.0
 
     cur.execute("UPDATE market_orders SET status = 'CANCELLED' WHERE id = %s", (order_id,))
-    return {"success": True, "order_id": order_id, "refunded_amount": unfilled}
+    return {
+        "success": True,
+        "order_id": order_id,
+        "order_type": order["order_type"],
+        "resource_type": order["resource_type"],
+        "refunded_amount": refunded_amount,
+        "refunded_funds": refunded_gold,
+    }
 
 def get_order_book(cur, resource_type: str, current_user_id: int) -> Dict[str, Any]:
-    """Fetches active bids (BUY) and asks (SELL) for the order book."""
-    # Top Bids: highest price first
+    """
+    Fetches aggregated order book depth ladder for bids and asks,
+    combining multiple orders at the same limit price into total volume.
+    """
+    # 1. Aggregated Bids (highest price first)
     cur.execute(
         """
-        SELECT id, user_id, amount, filled_amount, limit_price, created_at
+        SELECT 
+            limit_price, 
+            SUM(amount - filled_amount) AS total_amount, 
+            COUNT(*) AS order_count,
+            BOOL_OR(user_id = %s) AS has_own
         FROM market_orders
         WHERE resource_type = %s AND status = 'ACTIVE' AND order_type = 'BUY'
-        ORDER BY limit_price DESC, created_at ASC
+        GROUP BY limit_price
+        ORDER BY limit_price DESC
         LIMIT 25
         """,
-        (resource_type,),
+        (current_user_id, resource_type),
     )
+    raw_bids = cur.fetchall()
     bids = []
-    for r in cur.fetchall():
+    cum_bid = 0.0
+    for r in raw_bids:
+        amt = round(float(r["total_amount"]), 2)
+        cum_bid = round(cum_bid + amt, 2)
         bids.append({
-            "id": r["id"],
-            "amount": round(float(r["amount"]) - float(r["filled_amount"]), 2),
             "limit_price": float(r["limit_price"]),
-            "is_own": r["user_id"] == current_user_id,
-            "created_at": r["created_at"],
+            "total_amount": amt,
+            "cumulative_amount": cum_bid,
+            "order_count": int(r["order_count"]),
+            "has_own": bool(r["has_own"]),
         })
 
-    # Top Asks: lowest price first
+    # 2. Aggregated Asks (lowest price first)
     cur.execute(
         """
-        SELECT id, user_id, amount, filled_amount, limit_price, created_at
+        SELECT 
+            limit_price, 
+            SUM(amount - filled_amount) AS total_amount, 
+            COUNT(*) AS order_count,
+            BOOL_OR(user_id = %s) AS has_own
         FROM market_orders
         WHERE resource_type = %s AND status = 'ACTIVE' AND order_type = 'SELL'
-        ORDER BY limit_price ASC, created_at ASC
+        GROUP BY limit_price
+        ORDER BY limit_price ASC
         LIMIT 25
         """,
-        (resource_type,),
+        (current_user_id, resource_type),
     )
+    raw_asks = cur.fetchall()
     asks = []
-    for r in cur.fetchall():
+    cum_ask = 0.0
+    for r in raw_asks:
+        amt = round(float(r["total_amount"]), 2)
+        cum_ask = round(cum_ask + amt, 2)
         asks.append({
-            "id": r["id"],
-            "amount": round(float(r["amount"]) - float(r["filled_amount"]), 2),
             "limit_price": float(r["limit_price"]),
-            "is_own": r["user_id"] == current_user_id,
-            "created_at": r["created_at"],
+            "total_amount": amt,
+            "cumulative_amount": cum_ask,
+            "order_count": int(r["order_count"]),
+            "has_own": bool(r["has_own"]),
         })
 
-    # User's active orders for this resource
+    # 3. User's active orders across all resources
     cur.execute(
         """
-        SELECT id, order_type, amount, filled_amount, limit_price, created_at
+        SELECT id, resource_type, order_type, amount, filled_amount, limit_price, created_at
         FROM market_orders
         WHERE user_id = %s AND status = 'ACTIVE'
         ORDER BY created_at DESC
-        LIMIT 20
+        LIMIT 50
         """,
         (current_user_id,),
     )
     my_orders = []
     for r in cur.fetchall():
+        rem = round(float(r["amount"]) - float(r["filled_amount"]), 2)
+        val = round(rem * float(r["limit_price"]), 2)
         my_orders.append({
             "id": r["id"],
+            "resource_type": r["resource_type"],
             "order_type": r["order_type"],
             "amount": float(r["amount"]),
             "filled_amount": float(r["filled_amount"]),
-            "remaining": round(float(r["amount"]) - float(r["filled_amount"]), 2),
+            "remaining": rem,
             "limit_price": float(r["limit_price"]),
+            "total_value": val,
+            "is_current_resource": r["resource_type"] == resource_type,
             "created_at": r["created_at"],
         })
 
