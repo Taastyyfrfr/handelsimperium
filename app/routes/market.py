@@ -179,7 +179,9 @@ def cancel_market_order(
             try:
                 res = cancel_order(cur, user["id"], order_id)
                 conn.commit()
-                if res.get("refunded_funds", 0) > 0:
+                if not res.get("success", False):
+                    message = res.get("message", f"Order #{order_id} konnte nicht storniert werden.")
+                elif res.get("refunded_funds", 0) > 0:
                     message = f"Kauf-Order #{order_id} storniert. {res['refunded_funds']:.2f} Taler Treuhandguthaben gutgeschrieben."
                 else:
                     message = f"Verkaufs-Order #{order_id} storniert. {res['refunded_amount']:.2f} {res['resource_type']} dem Lager gutgeschrieben."

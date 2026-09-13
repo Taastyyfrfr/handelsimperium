@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Any, Optional
 
 from app.config import (
+    settings,
     CARAVAN_MAX_CARGO,
     TRANSIT_SPEED_FACTOR,
     SUPPORTED_RESOURCES,
@@ -255,6 +256,27 @@ def unload_caravan(cur, user_id: int, caravan_id: int) -> Dict[str, Any]:
 
     dest_region_id = caravan["destination_region_id"]
     cargo_data = caravan["cargo"] if isinstance(caravan["cargo"], dict) else json.loads(caravan["cargo"])
+
+    # Enforce foreign regional depot capacity limit
+    cur.execute(
+        """
+        SELECT resource_type, amount
+        FROM regional_depots
+        WHERE user_id = %s AND region_id = %s
+        FOR UPDATE
+        """,
+        (user_id, dest_region_id),
+    )
+    existing_depot_rows = cur.fetchall()
+    current_depot_total = sum(float(r["amount"]) for r in existing_depot_rows)
+    cargo_total = sum(float(v) for v in cargo_data.values() if float(v) > 0)
+    depot_cap = getattr(settings, "REGIONAL_DEPOT_CAP", 500.0)
+
+    if current_depot_total + cargo_total > depot_cap:
+        raise ValueError(
+            f"Regionaldepot ist voll: Kapazitätsgrenze von {depot_cap:.0f} Einheiten würde überschritten "
+            f"(Aktuell: {current_depot_total:.2f}, Ladung: {cargo_total:.2f})."
+        )
 
     # Stockpile in regional_depots atomically
     for res, amt in cargo_data.items():

@@ -1,6 +1,6 @@
 import os
 from typing import Optional, Dict
-from fastapi import APIRouter, Request, Depends, Form
+from fastapi import APIRouter, Request, Depends, Form, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -23,6 +23,7 @@ def render_expeditions_response(
     user_id: int,
     message: Optional[str] = None,
     error: Optional[str] = None,
+    status_code: int = 200,
 ) -> HTMLResponse:
     """Renders the comprehensive Logistics Terminal HTMX partial."""
     with get_db_connection() as conn:
@@ -42,6 +43,7 @@ def render_expeditions_response(
             "message": message,
             "error": error,
         },
+        status_code=status_code,
     )
 
 
@@ -113,6 +115,7 @@ def handle_unload_caravan(
     """
     message = None
     error = None
+    status_code = 200
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -125,11 +128,13 @@ def handle_unload_caravan(
             except ValueError as e:
                 conn.rollback()
                 error = str(e)
+                if "regionaldepot ist voll" in error.lower() or "kapazitätsgrenze" in error.lower():
+                    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
             except Exception as e:
                 conn.rollback()
                 error = f"Fehler beim Entladen: {str(e)}"
 
-    return render_expeditions_response(request, user["id"], message=message, error=error)
+    return render_expeditions_response(request, user["id"], message=message, error=error, status_code=status_code)
 
 
 @router.post("/caravans/depots/{region_id}/transfer", response_class=HTMLResponse)

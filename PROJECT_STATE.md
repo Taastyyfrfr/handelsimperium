@@ -1,8 +1,8 @@
 # Project State: Handelsimperium
 
-**Generated:** 2026-09-13T10:07:00+02:00  
+**Generated:** 2026-09-13T10:35:00+02:00  
 **Repository Branch:** `main`  
-**Current Phase:** Phase 10 (Dynamic Price Bands, Guild Territory & Kontor Auctions)  
+**Current Phase:** Phase 10 (Dynamic Price Bands, Guild Territory & Kontor Auctions) + System Integrity Hardening  
 **Production Host:** `80.158.79.44` (`ssh server`)  
 **Public Endpoint:** [http://80.158.79.44/](http://80.158.79.44/)
 
@@ -222,6 +222,12 @@
 - `contributed_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - *Index:* `idx_guild_contributions_lookup ON guild_contributions(guild_id, user_id)`
 
+### 2.20 `rate_limits` (Phase 10 Integrity Patch)
+- `id`: `BIGSERIAL PRIMARY KEY`
+- `client_key`: `VARCHAR(128) NOT NULL`
+- `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- *Index:* `idx_rate_limits_key_time ON rate_limits(client_key, created_at DESC)`
+
 ---
 
 ## 3. Core Economic Equations
@@ -281,6 +287,18 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
   - **25% Expedition Transit Speedup:** Caravans departing from or heading toward a region controlled by the merchant's guild receive a $0.75\times$ duration reduction ($\text{SpeedMultiplier} = 0.75$):
     $$\text{duration}_{\text{effective}} = \max(1, \text{round}(\text{duration}_{\text{base}} \times 0.75))$$
   - **0.5% Regional Trade Tax Dividend:** For every executed market trade where the seller belongs to the controlled region, $0.5\%$ of the total trade value is automatically credited to the controlling guild's bank treasury.
+
+### 3.9 Logistics Depot Storage Caps & Multi-Worker Rate Limiting (System Integrity Patch)
+- **Foreign Regional Depot Cap:**
+  $$\sum_{r \in \text{Resources}} \text{amount}_{\text{depot}}(u, \text{region}, r) \le 500.0 \quad (\text{settings.REGIONAL\_DEPOT\_CAP})$$
+  Caravan unloading requests that would cause total stored commodities in the destination region's depot to exceed 500 units are rejected with `ValueError` and HTTP 422 (`"Regionaldepot ist voll"`).
+- **Non-Negative Production Delta Floor:**
+  $$\Delta t = \max(0.0, (T_{now} - \text{last\_calculated\_at}).\text{total\_seconds}())$$
+  Protects against clock skew or future-dated timestamps to guarantee production delta is strictly non-negative ($\Delta t \ge 0.0$) and inventory levels never decrease from production ticks.
+- **PostgreSQL-Backed Sliding-Window Rate Limiter:**
+  - Synchronizes sliding-window request tracking across multiple Uvicorn worker processes via PostgreSQL table `rate_limits`.
+  - Serializes concurrent evaluation per client key using transaction-level advisory locking: `SELECT pg_advisory_xact_lock(hashtext(%s))`.
+  - Opportunistic background pruning (5% of requests) deletes expired entries older than 10 minutes.
 
 ---
 
@@ -421,14 +439,35 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
 - **Zero-Yield Building Initialization (`app/engine/production.py` & `app/routes/auth_routes.py`):**
   - For commodities where the merchant's home region has a `0.0` multiplier (import-only goods), buildings are initialized with `level = 0` and `production_rate = 0.0000` (instead of level 1 with 0 rate), reflecting that non-indigenous extraction infrastructure does not exist in the home settlement.
 
+### Secondary System Integrity & Vulnerability Patches
+- **Regional Depot Storage Caps (`app/engine/caravans.py` & `app/config.py`):**
+  - Enforced `REGIONAL_DEPOT_CAP = 500.0` across foreign depots per player and per region.
+  - In `unload_caravan`, existing depot holdings are queried via row-level locks (`SELECT ... FOR UPDATE`); unloading that breaches the 500-unit cap is aborted with `ValueError` and mapped to HTTP 422 Unprocessable Content (`"Regionaldepot ist voll"`).
+- **Guild Disbandment & Succession Guard (`app/engine/guilds.py`):**
+  - On guild leader departure, leadership priority transfers to the highest-ranking officer (`ORDER BY CASE WHEN role = 'OFFICER' THEN 0 ELSE 1 END ASC, joined_at ASC`).
+  - If the departing leader is the sole remaining member, all dependent foreign key records (`guild_projects`, `guild_bank_inventory`, `guild_bank`, `guild_contributions`, `regional_controllers`, `kontor_auctions`, `guild_members`, `guilds`) are atomically deleted, dissolving the alliance cleanly.
+- **Null-Safe Regional Trade Tax Dividends (`app/engine/matching.py` & `app/engine/auctions.py`):**
+  - Wrapped 0.5% territorial trade dividend execution in active controller existence check (`valid_until > NOW()`, `guild_id IS NOT NULL`).
+  - If the seller's home region is uncontrolled or expired, the trade fee remains burned without raising null reference errors or rolling back valid market matches.
+- **Strict Non-Negative Production Delta Guard (`app/engine/production.py`):**
+  - Implemented floor guard $\Delta t = \max(0.0, (T_{now} - \text{last\_calculated\_at}).\text{total\_seconds}())$ to prevent clock skew or future-dated records from subtracting inventory or yielding negative offline amounts.
+- **Multi-Worker Database-Backed Rate Limiting (`app/rate_limiter.py` & `migrations/010_phase10_rate_limits.sql`):**
+  - Replaced in-memory sliding window with PostgreSQL table `rate_limits` indexed on `(client_key, created_at DESC)`.
+  - Concurrency across worker processes is serialized via transaction-level advisory locks `SELECT pg_advisory_xact_lock(hashtext(key))`.
+  - Includes opportunistic background pruning of expired entries older than 10 minutes.
+- **Atomic Order Cancellation Verification (`app/engine/matching.py` & `app/routes/market.py`):**
+  - Order cancellation locks the target row with `SELECT ... FOR UPDATE` and re-verifies `status == 'ACTIVE'`.
+  - Strictly refunds remaining escrow funds `(amount - filled_amount) * limit_price` (for BUY) or remaining commodities `amount - filled_amount` (for SELL).
+  - Duplicate or race-conditioned cancellation attempts on filled/cancelled orders cleanly abort returning `success = False` with zero balance mutation.
+
 ---
 
 ## 5. Test Suite Metrics
 
 All tests execute cleanly directly against PostgreSQL on the production server:
-- **Total Test Files:** 14
-- **Total Tests:** 61
-- **Pass Rate:** 100% (61 passed in 17.74s)
+- **Total Test Files:** 15
+- **Total Tests:** 68
+- **Pass Rate:** 100% (68 passed in 22.73s)
 
 | Test File | Tests | Coverage Scope |
 | :--- | :--- | :--- |
@@ -446,6 +485,7 @@ All tests execute cleanly directly against PostgreSQL on the production server:
 | `tests/test_phase10_auctions_and_limits.py` | 7 | Dynamic price bands [0.5x, 2.0x VWAP], War Chest deposits, Kontor auction bidding & outbid refund, epoch resolution, speed bonuses, regional trade tax dividends, tutorial step 7, HTTP endpoints |
 | `tests/test_production.py` | 2 | Offline production delta calculation and storage cap enforcement |
 | `tests/test_progression_and_cancel.py` | 5 | Multi-resource upgrade sufficiency/rollback, warehouse cap, aggregated depth |
+| `tests/test_system_integrity.py` | 7 | Regional depot capacity limit, guild disbandment on sole leader exit, officer succession priority, trades in uncontrolled regions, negative time delta guard, atomic cancellation race condition, multi-worker rate limiter simulation |
 
 ---
 

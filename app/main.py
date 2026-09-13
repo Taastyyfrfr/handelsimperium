@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-from app.database import init_pool, close_pool
+from app.database import init_pool, close_pool, get_db_connection
 from app.csrf import CSRFMiddleware
 from app.routes.auth_routes import router as auth_router
 from app.routes.game_routes import router as game_router
@@ -22,8 +22,22 @@ import os
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: initialize connection pool
+    # Startup: initialize connection pool & rate limits table
     init_pool()
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS rate_limits (
+                        id BIGSERIAL PRIMARY KEY,
+                        client_key VARCHAR(128) NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_rate_limits_key_time ON rate_limits(client_key, created_at DESC);
+                """)
+                conn.commit()
+    except Exception:
+        pass
     yield
     # Shutdown: close connection pool
     close_pool()

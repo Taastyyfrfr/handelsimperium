@@ -1,29 +1,27 @@
 import time
-from collections import defaultdict
-from threading import Lock
+import random
+import logging
 from typing import Callable, Optional
+from datetime import datetime, timezone, timedelta
 from fastapi import Request, HTTPException, status
 from fastapi.responses import HTMLResponse
+
 from app.config import settings
+from app.database import get_db_connection
+
+logger = logging.getLogger(__name__)
 
 class SlidingWindowRateLimiter:
     """
-    Thread-safe in-memory sliding-window rate limiter.
+    PostgreSQL-backed shared sliding-window rate limiter.
+    Synchronizes request limits across multiple Uvicorn worker processes.
     Identifies clients via session token or IP address.
     """
-    def __init__(self):
-        # Key -> list of float timestamps
-        self._history = defaultdict(list)
-        self._lock = Lock()
-
     def _get_client_key(self, request: Request, scope: str) -> str:
-        # 1. Prefer authenticated session token if available
         session_token = request.cookies.get(settings.COOKIE_NAME)
         if session_token:
-            # Use prefix of session token
             key_id = f"session:{session_token[:24]}"
         else:
-            # Fall back to client IP from X-Forwarded-For or socket
             forwarded = request.headers.get("X-Forwarded-For")
             if forwarded:
                 client_ip = forwarded.split(",")[0].strip()
@@ -37,25 +35,62 @@ class SlidingWindowRateLimiter:
         if not settings.RATE_LIMIT_ENABLED:
             return True
 
-        now = time.time()
         key = self._get_client_key(request, scope)
-        window_start = now - window_seconds
 
-        with self._lock:
-            # Prune timestamps outside current sliding window
-            timestamps = [t for t in self._history[key] if t > window_start]
-            if len(timestamps) >= max_requests:
-                self._history[key] = timestamps
-                return False
-            
-            timestamps.append(now)
-            self._history[key] = timestamps
+        now = datetime.now(timezone.utc)
+        window_start = now - timedelta(seconds=window_seconds)
+
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    # Serialize concurrent checks for this specific client key across all workers
+                    cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (key,))
+
+                    # Count existing requests in sliding window
+                    cur.execute(
+                        """
+                        SELECT COUNT(*) AS count
+                        FROM rate_limits
+                        WHERE client_key = %s
+                          AND created_at > %s
+                        """,
+                        (key, window_start),
+                    )
+                    row = cur.fetchone()
+                    count = row["count"] if row else 0
+
+                    if count >= max_requests:
+                        return False
+
+                    # Record current request
+                    cur.execute(
+                        "INSERT INTO rate_limits (client_key, created_at) VALUES (%s, %s)",
+                        (key, now),
+                    )
+
+                    # Opportunistic pruning (5% of requests prune entries older than 10 minutes)
+                    if random.random() < 0.05:
+                        cur.execute(
+                            "DELETE FROM rate_limits WHERE created_at < %s",
+                            (now - timedelta(minutes=10),),
+                        )
+
+                    conn.commit()
+                    return True
+        except Exception as e:
+            # Fail-open if rate limiter table is unavailable during bootstrap
+            logger.warning("SlidingWindowRateLimiter error: %s", e)
             return True
 
     def reset(self):
-        """Clears all recorded rate limit history (useful for test isolation)."""
-        with self._lock:
-            self._history.clear()
+        """Clears all recorded rate limit history across all workers."""
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM rate_limits")
+                    conn.commit()
+        except Exception:
+            pass
 
 limiter = SlidingWindowRateLimiter()
 

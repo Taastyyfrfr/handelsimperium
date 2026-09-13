@@ -295,7 +295,10 @@ def place_and_match_order(
         trade_rec = cur.fetchone()
 
         # Regional tax dividend for controlling guild (0.5% of trade value)
-        credit_regional_trade_tax(cur, seller_id, float(trade_value))
+        try:
+            credit_regional_trade_tax(cur, seller_id, float(trade_value))
+        except Exception:
+            pass  # Fail-safe: trade execution must never fail due to tax dividend error
 
         # Update maker order
         new_maker_filled = Decimal(str(round(float(maker["filled_amount"]) + float(trade_qty), 2)))
@@ -390,15 +393,21 @@ def cancel_order(cur, user_id: int, order_id: int) -> Dict[str, Any]:
     if order["user_id"] != user_id:
         raise PermissionError("Keine Berechtigung, fremde Orders zu stornieren.")
     if order["status"] != "ACTIVE":
-        raise ValueError(f"Order kann nicht storniert werden (Status: {order['status']}).")
+        return {
+            "success": False,
+            "order_id": order_id,
+            "message": f"Order #{order_id} kann nicht storniert werden (Status: {order['status']}).",
+            "refunded_amount": 0.0,
+            "refunded_funds": 0.0,
+        }
 
     unfilled = Decimal(str(order["amount"])) - Decimal(str(order["filled_amount"]))
     if unfilled <= 0:
         cur.execute("UPDATE market_orders SET status = 'FILLED' WHERE id = %s", (order_id,))
         return {
-            "success": True,
+            "success": False,
             "order_id": order_id,
-            "message": "Order war bereits vollständig ausgeführt.",
+            "message": f"Order #{order_id} war bereits vollständig ausgeführt.",
             "refunded_amount": 0.0,
             "refunded_funds": 0.0,
         }

@@ -437,25 +437,43 @@ def credit_regional_trade_tax(cur, seller_id: int, trade_value: float):
     """
     Credits a 0.5% trade tax dividend to the controlling guild's bank for the
     region where the trade is settled (seller's Kontor region).
+    Safeguarded against unassigned, null, or expired territorial controllers.
     """
+    if trade_value <= 0:
+        return
+
     cur.execute("SELECT region_id FROM users WHERE id = %s", (seller_id,))
     user_row = cur.fetchone()
-    if not user_row or not user_row["region_id"]:
+    if not user_row or not user_row.get("region_id"):
         return
 
     seller_region = user_row["region_id"]
-    tax_dividend = round(trade_value * 0.005, 2)
+    tax_dividend = Decimal(str(round(trade_value * 0.005, 2)))
     if tax_dividend <= 0:
         return
 
+    # Check for active regional controller
+    cur.execute(
+        """
+        SELECT guild_id
+        FROM regional_controllers
+        WHERE region_id = %s
+          AND guild_id IS NOT NULL
+          AND valid_until > NOW()
+        """,
+        (seller_region,),
+    )
+    controller_row = cur.fetchone()
+    if not controller_row or not controller_row.get("guild_id"):
+        # No active controlling guild; dividend remains in standard market fee burn sink
+        return
+
+    controlling_guild_id = controller_row["guild_id"]
     cur.execute(
         """
         UPDATE guild_bank
         SET balance = balance + %s
-        FROM regional_controllers rc
-        WHERE guild_bank.guild_id = rc.guild_id
-          AND rc.region_id = %s
-          AND rc.valid_until > NOW()
+        WHERE guild_id = %s
         """,
-        (tax_dividend, seller_region),
+        (tax_dividend, controlling_guild_id),
     )

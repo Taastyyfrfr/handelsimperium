@@ -226,13 +226,13 @@ def leave_guild(cur, user_id: int) -> Dict[str, Any]:
     new_leader_id = None
 
     if role == "LEADER":
-        # Find next oldest member
+        # Find next leader: prioritize highest-ranking officer, then oldest member (joined_at ASC)
         cur.execute(
             """
-            SELECT user_id
+            SELECT user_id, role
             FROM guild_members
             WHERE guild_id = %s AND user_id != %s
-            ORDER BY joined_at ASC
+            ORDER BY CASE WHEN role = 'OFFICER' THEN 0 ELSE 1 END ASC, joined_at ASC
             LIMIT 1
             """,
             (guild_id, user_id),
@@ -244,7 +244,14 @@ def leave_guild(cur, user_id: int) -> Dict[str, Any]:
             cur.execute("UPDATE guild_members SET role = 'LEADER' WHERE user_id = %s", (new_leader_id,))
             cur.execute("DELETE FROM guild_members WHERE user_id = %s", (user_id,))
         else:
-            # Sole member leaving -> disband guild
+            # Sole remaining member leaving -> atomically dissolve guild
+            cur.execute("DELETE FROM guild_projects WHERE guild_id = %s", (guild_id,))
+            cur.execute("DELETE FROM guild_bank_inventory WHERE guild_id = %s", (guild_id,))
+            cur.execute("DELETE FROM guild_bank WHERE guild_id = %s", (guild_id,))
+            cur.execute("DELETE FROM guild_contributions WHERE guild_id = %s", (guild_id,))
+            cur.execute("UPDATE regional_controllers SET guild_id = NULL WHERE guild_id = %s", (guild_id,))
+            cur.execute("UPDATE kontor_auctions SET highest_bidder_guild_id = NULL WHERE highest_bidder_guild_id = %s", (guild_id,))
+            cur.execute("DELETE FROM guild_members WHERE guild_id = %s", (guild_id,))
             cur.execute("DELETE FROM guilds WHERE id = %s", (guild_id,))
             disbanded = True
     else:

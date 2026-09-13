@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     
     MARKET_FEE_RATE: float = 0.02  # 2% market fee
     BASE_STORAGE_CAP: float = 1000.0  # Base storage capacity per resource for Level 1 warehouse
+    REGIONAL_DEPOT_CAP: float = 500.0  # Max total goods stored in a foreign regional depot
     RATE_LIMIT_ENABLED: bool = True
     CSRF_ENABLED: bool = True
     CSRF_COOKIE_NAME: str = "imperium_csrf"

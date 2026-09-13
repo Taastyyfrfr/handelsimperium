@@ -190,15 +190,16 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
         if last_calc.tzinfo is None:
             last_calc = last_calc.replace(tzinfo=timezone.utc)
         
-        if last_calc < min_last_calc:
+        raw_delta = (now - last_calc).total_seconds()
+        delta_seconds = max(0.0, raw_delta)
+        if last_calc < min_last_calc and raw_delta >= 0:
             min_last_calc = last_calc
             
-        delta_seconds = max(0.0, (now - last_calc).total_seconds())
         if delta_seconds > max_delta_seconds:
             max_delta_seconds = delta_seconds
         delta_seconds_map[res] = delta_seconds
             
-        generated = delta_seconds * rate
+        generated = max(0.0, delta_seconds * rate)
         nominal_generated[res] = generated
         current_amounts[res] = float(inv["amount"])
 
@@ -216,7 +217,7 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
             if res not in current_amounts:
                 continue
             gen = nominal_generated[res]
-            net_added[res] = gen
+            net_added[res] = max(0.0, gen)
             lost_due_to_cap[res] = 0.0
             final_amounts[res] = round(current_amounts[res] + gen, 2)
     else:
@@ -238,7 +239,7 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
                     add_amt = max(0.0, round(remaining_capacity - allocated_so_far, 2))
                 allocated_so_far += add_amt
 
-            net_added[res] = add_amt
+            net_added[res] = max(0.0, add_amt)
             lost_due_to_cap[res] = max(0.0, round(gen - add_amt, 2))
             final_amounts[res] = round(current_amounts[res] + add_amt, 2)
 
@@ -249,11 +250,15 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
                 final_amounts[res] = current_amounts[res]
 
     for res in SUPPORTED_RESOURCES:
-        if res in final_amounts and final_amounts[res] > storage_cap:
-            over = round(final_amounts[res] - storage_cap, 2)
-            lost_due_to_cap[res] = round(lost_due_to_cap.get(res, 0.0) + over, 2)
-            net_added[res] = max(0.0, round(net_added.get(res, 0.0) - over, 2))
-            final_amounts[res] = float(storage_cap)
+        if res in final_amounts:
+            # Guarantee inventory levels never decrease as a result of production evaluations
+            if current_amounts.get(res, 0.0) <= storage_cap:
+                final_amounts[res] = max(current_amounts[res], final_amounts[res])
+            if final_amounts[res] > storage_cap:
+                over = round(final_amounts[res] - storage_cap, 2)
+                lost_due_to_cap[res] = round(lost_due_to_cap.get(res, 0.0) + over, 2)
+                net_added[res] = max(0.0, round(net_added.get(res, 0.0) - over, 2))
+                final_amounts[res] = float(storage_cap)
 
     for res in SUPPORTED_RESOURCES:
         if res not in current_amounts:
