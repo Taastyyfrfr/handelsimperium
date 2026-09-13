@@ -267,7 +267,8 @@ def test_tutorial_step6_expedition_completion(db_conn):
         db_conn.commit()
 
         assert claim_res["claimed_step"] == 6
-        assert claim_res["is_finished"] is True
+        assert claim_res["next_step"] == 7
+        assert claim_res["is_finished"] is False
 
         # Verify rewards disbursed (100 Taler, 30 Cloth)
         cur.execute("SELECT balance FROM users WHERE id = %s", (uid,))

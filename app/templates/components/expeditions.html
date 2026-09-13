@@ -23,6 +23,9 @@
             <div class="text-amber-400 font-mono font-bold flex items-center justify-end space-x-1">
                 <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px]">[{{ overview.home_region.tag }}]</span>
                 <span>{{ overview.home_region.name }}</span>
+                {% if user.controller_guild_tag %}
+                <span class="text-[11px] text-amber-300 ml-1 font-sans" title="Kontor beherrscht von Gilde [{{ user.controller_guild_tag }}]">👑 [{{ user.controller_guild_tag }}]</span>
+                {% endif %}
             </div>
             <div class="text-[10px] text-slate-500 font-mono">
                 Koord: ({{ overview.home_region.coord_x }}, {{ overview.home_region.coord_y }}) | Lagerlimit: {{ "%.0f"|format(overview.storage_cap) }}
@@ -84,7 +87,7 @@
                                     data-dur="{{ reg.duration_seconds }}"
                                     data-tag="{{ reg.tag }}"
                                     data-desc="{{ reg.description }}">
-                                [{{ reg.tag }}] {{ reg.name }} (Distanz: {{ reg.distance }} sm, Reisezeit: {{ reg.duration_seconds }}s)
+                                [{{ reg.tag }}] {{ reg.name }}{% if reg.controller_guild_tag %} 👑 [{{ reg.controller_guild_tag }}]{% endif %} (Distanz: {{ reg.distance }} sm, Reisezeit: {{ reg.duration_seconds }}s{% if reg.has_speed_bonus %} ⚡ 25% Gilden-Bonus{% endif %})
                             </option>
                             {% endfor %}
                         </select>

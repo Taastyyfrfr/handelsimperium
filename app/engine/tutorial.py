@@ -51,6 +51,14 @@ TUTORIAL_STEPS = {
         "reward_desc": "100.00 Taler & 30 Tuch",
         "reward": {"balance": 100.0, "resources": {"cloth": 30.0}},
     },
+    7: {
+        "step_id": 7,
+        "title": "7. Macht der Hanse",
+        "description": "Engagiere Dich für das Gemeinwohl Deines Bündnisses: Zahle Taler in die Gildenkasse ein, spende Rohstoffe für ein Monument oder führe eine Gilde an.",
+        "requirement_text": "Einen Beitrag zur Gildenkasse leisten, für ein Monument spenden oder Gildenmeister sein.",
+        "reward_desc": "200.00 Taler & 40 Eisen",
+        "reward": {"balance": 200.0, "resources": {"iron": 40.0}},
+    },
 }
 
 def ensure_user_tutorial(cur, user_id: int) -> Dict[str, Any]:
@@ -143,6 +151,20 @@ def is_step_eligible(cur, user_id: int, step_id: int) -> bool:
         # Step 6: Dispatched at least 1 caravan
         cur.execute(
             "SELECT 1 FROM caravans WHERE user_id = %s LIMIT 1",
+            (user_id,),
+        )
+        return cur.fetchone() is not None
+
+    elif step_id == 7:
+        # Step 7: Contributed to guild bank, monument, auction bid, or is guild leader
+        cur.execute(
+            "SELECT 1 FROM guild_contributions WHERE user_id = %s LIMIT 1",
+            (user_id,),
+        )
+        if cur.fetchone() is not None:
+            return True
+        cur.execute(
+            "SELECT 1 FROM guilds WHERE leader_id = %s LIMIT 1",
             (user_id,),
         )
         return cur.fetchone() is not None

@@ -7,7 +7,7 @@ from app.database import get_db_connection
 from app.config import SUPPORTED_RESOURCES
 from app.models import OrderCreate
 from app.rate_limiter import rate_limit
-from app.engine.matching import place_and_match_order, cancel_order, get_order_book
+from app.engine.matching import place_and_match_order, cancel_order, get_order_book, get_price_corridor
 from app.engine.production import calculate_offline_production
 import os
 
@@ -32,6 +32,7 @@ def market_book_view(
             cur.execute("SELECT resource_type, amount FROM inventories WHERE user_id = %s", (user["id"],))
             inventories = {r["resource_type"]: float(r["amount"]) for r in cur.fetchall()}
             book_data = get_order_book(cur, resource, user["id"])
+            price_floor, price_ceiling, ref_price = get_price_corridor(cur, resource)
             conn.commit()
 
     return templates.TemplateResponse(
@@ -47,6 +48,9 @@ def market_book_view(
             "my_orders": book_data["my_orders"],
             "last_price": book_data.get("last_price"),
             "vwap_24h": book_data.get("vwap_24h"),
+            "price_floor": price_floor,
+            "price_ceiling": price_ceiling,
+            "ref_price": ref_price,
             "volume_24h": book_data.get("volume_24h"),
             "trade_count_24h": book_data.get("trade_count_24h"),
             "recent_trades": book_data.get("recent_trades", []),
@@ -90,6 +94,13 @@ def create_market_order(
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            floor, ceiling, ref_p = get_price_corridor(cur, resource_type)
+            if limit_price < floor or limit_price > ceiling:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Limitpreis liegt außerhalb der zulässigen Handelsspanne ({floor:.2f} - {ceiling:.2f} Taler).",
+                )
+
             if validated_order:
                 try:
                     res = place_and_match_order(
@@ -118,6 +129,7 @@ def create_market_order(
             cur.execute("SELECT resource_type, amount FROM inventories WHERE user_id = %s", (user["id"],))
             inventories = {r["resource_type"]: float(r["amount"]) for r in cur.fetchall()}
             book_data = get_order_book(cur, resource_type, user["id"])
+            price_floor, price_ceiling, ref_price = get_price_corridor(cur, resource_type)
             conn.commit()
 
     return templates.TemplateResponse(
@@ -133,6 +145,9 @@ def create_market_order(
             "my_orders": book_data["my_orders"],
             "last_price": book_data.get("last_price"),
             "vwap_24h": book_data.get("vwap_24h"),
+            "price_floor": price_floor,
+            "price_ceiling": price_ceiling,
+            "ref_price": ref_price,
             "volume_24h": book_data.get("volume_24h"),
             "trade_count_24h": book_data.get("trade_count_24h"),
             "recent_trades": book_data.get("recent_trades", []),
@@ -184,6 +199,7 @@ def cancel_market_order(
             cur.execute("SELECT resource_type, amount FROM inventories WHERE user_id = %s", (user["id"],))
             inventories = {r["resource_type"]: float(r["amount"]) for r in cur.fetchall()}
             book_data = get_order_book(cur, resource_type, user["id"])
+            price_floor, price_ceiling, ref_price = get_price_corridor(cur, resource_type)
             conn.commit()
 
     return templates.TemplateResponse(
@@ -199,6 +215,9 @@ def cancel_market_order(
             "my_orders": book_data["my_orders"],
             "last_price": book_data.get("last_price"),
             "vwap_24h": book_data.get("vwap_24h"),
+            "price_floor": price_floor,
+            "price_ceiling": price_ceiling,
+            "ref_price": ref_price,
             "volume_24h": book_data.get("volume_24h"),
             "trade_count_24h": book_data.get("trade_count_24h"),
             "recent_trades": book_data.get("recent_trades", []),

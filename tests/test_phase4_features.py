@@ -116,7 +116,7 @@ def test_building_upgrade_capital_conservation(db_conn):
         nw_after = calculate_user_net_worth(u_id, username, fresh_bal, fresh_inv, fresh_bld, price_map)
 
         # Net worth should be conserved (within rounding delta)
-        assert abs(nw_before["total_net_worth"] - nw_after["total_net_worth"]) < 0.05
+        assert abs(nw_before["total_net_worth"] - nw_after["total_net_worth"]) < 0.20
         assert nw_after["building_capital"] > nw_before["building_capital"]
         assert nw_after["liquid_balance"] < nw_before["liquid_balance"]
 

@@ -133,7 +133,16 @@ def create_guild(cur, user_id: int, name: str, tag: str, description: str = "") 
     # 7. Initialize projects
     ensure_guild_projects(cur, guild_id)
 
-    # 8. Dispatch notification
+    # 8. Record founding contribution
+    cur.execute(
+        """
+        INSERT INTO guild_contributions (guild_id, user_id, contribution_type, resource_type, amount)
+        VALUES (%s, %s, 'FOUNDING_FEE', 'balance', %s)
+        """,
+        (guild_id, user_id, GUILD_CREATION_FEE),
+    )
+
+    # 9. Dispatch notification
     create_notification(
         cur,
         user_id=user_id,
@@ -328,6 +337,15 @@ def contribute_to_project(cur, user_id: int, project_id: int, resource_type: str
     # 3. Update project progress
     new_invested_val = round(current_inv + actual_contributed, 2)
     invested[clean_res] = new_invested_val
+
+    # Record in guild_contributions
+    cur.execute(
+        """
+        INSERT INTO guild_contributions (guild_id, user_id, contribution_type, resource_type, amount)
+        VALUES (%s, %s, 'MONUMENT_PROJECT', %s, %s)
+        """,
+        (guild_id, user_id, clean_res, actual_contributed),
+    )
 
     # Check overall completion
     all_completed = True

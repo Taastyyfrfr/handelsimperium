@@ -13,6 +13,11 @@ from app.engine.guilds import (
     get_user_guild_details,
     list_all_guilds,
 )
+from app.engine.auctions import (
+    deposit_to_guild_bank,
+    place_kontor_auction_bid,
+    get_kontor_auctions_overview,
+)
 
 router = APIRouter(prefix="/guilds", tags=["guilds"])
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "../templates"))
@@ -28,6 +33,7 @@ def render_guild_response(request: Request, user_id: int, message: str = None, e
 
             guild_data = get_user_guild_details(cur, user_id)
             all_guilds = list_all_guilds(cur) if not guild_data else []
+            kontor_auctions = get_kontor_auctions_overview(cur, user_id)
 
     return templates.TemplateResponse(
         request=request,
@@ -36,6 +42,7 @@ def render_guild_response(request: Request, user_id: int, message: str = None, e
             "user": user_row,
             "guild_data": guild_data,
             "all_guilds": all_guilds,
+            "kontor_auctions": kontor_auctions,
             "inv_map": inv_map,
             "message": message,
             "error": error,
@@ -159,4 +166,55 @@ def handle_contribute_project(
             except Exception as e:
                 conn.rollback()
                 error = f"Fehler beim Spenden: {str(e)}"
+    return render_guild_response(request, user["id"], message=message, error=error)
+
+@router.post("/bank/deposit", response_class=HTMLResponse)
+def handle_guild_bank_deposit(
+    request: Request,
+    amount: float = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    """
+    Deposits Taler into the guild's collective treasury (War Chest).
+    """
+    message = None
+    error = None
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                res = deposit_to_guild_bank(cur, user["id"], amount)
+                conn.commit()
+                message = f"💰 {res['amount']:.2f} Taler erfolgreich in die Gildenkasse eingezahlt! Neuer Kassenbestand: {res['new_bank_balance']:.2f} Taler."
+            except ValueError as e:
+                conn.rollback()
+                error = str(e)
+            except Exception as e:
+                conn.rollback()
+                error = f"Fehler bei der Einzahlung: {str(e)}"
+    return render_guild_response(request, user["id"], message=message, error=error)
+
+@router.post("/auctions/{auction_id}/bid", response_class=HTMLResponse)
+def handle_place_auction_bid(
+    request: Request,
+    auction_id: int,
+    bid_amount: float = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    """
+    Places a bid for regional Kontor control from the guild bank (LEADER/OFFICER only).
+    """
+    message = None
+    error = None
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                res = place_kontor_auction_bid(cur, user["id"], auction_id, bid_amount)
+                conn.commit()
+                message = f"👑 Gebot von {res['bid_amount']:.2f} Taler für das Kontor {res['region_name']} [{res['region_tag']}] erfolgreich abgegeben!"
+            except ValueError as e:
+                conn.rollback()
+                error = str(e)
+            except Exception as e:
+                conn.rollback()
+                error = f"Fehler bei der Gebotsabgabe: {str(e)}"
     return render_guild_response(request, user["id"], message=message, error=error)

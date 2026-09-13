@@ -100,6 +100,146 @@
         </div>
     </div>
 
+    <!-- War Chest / Gildenkasse Deposit Section -->
+    <div class="bg-slate-900/90 border border-amber-500/30 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="space-y-1">
+            <div class="flex items-center space-x-2">
+                <span class="text-2xl">💰</span>
+                <h3 class="text-base font-bold text-amber-400">Gildenkasse (Kriegskasse)</h3>
+            </div>
+            <p class="text-xs text-slate-300">
+                Guthaben: <span class="font-mono font-bold text-amber-300">{{ "%.2f"|format(guild_data.guild.bank_balance) }} Taler</span>. 
+                Wird von Gildenleitern und Offizieren für Kontor-Auktionen und Monumente eingesetzt.
+            </p>
+        </div>
+        <form hx-post="/guilds/bank/deposit"
+              hx-target="#main-panel"
+              hx-swap="innerHTML"
+              class="flex items-center gap-2 w-full md:w-auto">
+            <input type="number"
+                   name="amount"
+                   step="0.01"
+                   min="1"
+                   max="{{ user.balance }}"
+                   placeholder="Betrag"
+                   required
+                   class="w-32 bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-3 py-2 font-mono focus:ring-amber-500 focus:border-amber-500">
+            <button type="submit"
+                    class="min-h-[38px] px-4 py-2 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-lg text-xs shadow transition flex items-center space-x-1.5 cursor-pointer shrink-0">
+                <span>🪙</span>
+                <span>Einzahlen</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Kontor-Auktionen & Regionaler Einfluss Section -->
+    <div class="space-y-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl">👑</span>
+                <h3 class="text-lg font-bold text-slate-100">Kontor-Auktionen & Regionaler Einfluss</h3>
+            </div>
+            <span class="text-xs text-slate-400">
+                7-Tage-Epochen · 25% Reisedauer-Rabatt & 0,5% Handelszoll-Dividende
+            </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% for a in kontor_auctions %}
+            <div class="bg-slate-900/90 border {% if a.has_controller %}border-amber-500/40{% else %}border-slate-800{% endif %} rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4">
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xl">🏛️</span>
+                            <div>
+                                <div class="flex items-center space-x-2">
+                                    <h4 class="text-base font-bold text-slate-100">{{ a.region_name }}</h4>
+                                    <span class="px-2 py-0.5 rounded bg-slate-800 text-amber-300 font-mono text-xs font-bold border border-slate-700">
+                                        [{{ a.region_tag }}]
+                                    </span>
+                                </div>
+                                <p class="text-[11px] text-slate-400 mt-0.5">{{ a.region_desc }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Current Controlling Guild Status -->
+                    <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-1 text-xs">
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400 text-[11px] uppercase font-bold tracking-wider">Regierende Gilde:</span>
+                            {% if a.has_controller %}
+                            <span class="inline-flex items-center space-x-1 font-bold text-amber-300">
+                                <span>👑</span>
+                                <span>{{ a.controller_guild_name }} [{{ a.controller_guild_tag }}]</span>
+                            </span>
+                            {% else %}
+                            <span class="text-slate-500 italic">Keine (Neutraler Hansekontor)</span>
+                            {% endif %}
+                        </div>
+                        {% if a.has_controller %}
+                        <div class="flex justify-between items-center text-[11px] text-slate-400 pt-1 border-t border-slate-800/60">
+                            <span>Amtszeit verbleibend:</span>
+                            <span class="font-mono text-slate-200">{{ a.reign_countdown }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Active Auction Details -->
+                    <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-2 text-xs">
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400 text-[11px] uppercase font-bold tracking-wider">Auktions-Status:</span>
+                            <span class="font-mono text-amber-400 font-bold">Ablauf in {{ a.auction_countdown }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400">Aktuelles Höchstgebot:</span>
+                            <span class="font-mono font-bold text-emerald-400">
+                                {% if a.current_highest_bid > 0 %}
+                                {{ "%.2f"|format(a.current_highest_bid) }} Taler
+                                {% if a.highest_bidder_tag %}
+                                <span class="text-slate-400 text-[11px]">([{{ a.highest_bidder_tag }}])</span>
+                                {% endif %}
+                                {% else %}
+                                0.00 Taler (Kein Gebot)
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bidding Control -->
+                {% if a.can_bid %}
+                <div class="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3">
+                    <form hx-post="/guilds/auctions/{{ a.auction_id }}/bid"
+                          hx-target="#main-panel"
+                          hx-swap="innerHTML"
+                          class="flex items-center gap-2">
+                        <input type="number"
+                               name="bid_amount"
+                               step="0.01"
+                               min="{{ a.min_next_bid }}"
+                               placeholder="Min. {{ a.min_next_bid }} Taler"
+                               required
+                               class="w-full bg-slate-900 border border-slate-700 text-slate-100 text-xs rounded-lg px-3 py-2 font-mono focus:ring-amber-500 focus:border-amber-500">
+                        <button type="submit"
+                                class="min-h-[38px] px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-lg text-xs shadow transition flex items-center space-x-1 cursor-pointer shrink-0">
+                            <span>👑</span>
+                            <span>Bieten</span>
+                        </button>
+                    </form>
+                    <span class="text-[10px] text-slate-500 block mt-1">
+                        Wird aus der Gildenkasse gezahlt. Bei Überbietung sofortige Rückerstattung.
+                    </span>
+                </div>
+                {% elif guild_data %}
+                <div class="p-2.5 bg-slate-950/40 border border-slate-800/40 rounded-xl text-center text-[11px] text-slate-500">
+                    Nur Gildenmeister und Offiziere können für Kontore bieten.
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
     <!-- Cooperative Monuments Section -->
     <div class="space-y-4">
         <div class="flex items-center justify-between">
@@ -400,6 +540,88 @@
                 <p>Seid der Erste und gründet das mächtigste Bündnis der Hanse!</p>
             </div>
             {% endif %}
+        </div>
+    </div>
+
+    <!-- Kontor-Auktionen & Regionaler Einfluss Section (Overview) -->
+    <div class="space-y-4 pt-4 border-t border-slate-800/80">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl">👑</span>
+                <h3 class="text-lg font-bold text-slate-100">Kontor-Auktionen & Regionaler Einfluss</h3>
+            </div>
+            <span class="text-xs text-slate-400">
+                Regierende Gilden genießen 25% Reisedauer-Rabatt & 0,5% Handelszoll-Dividende
+            </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% for a in kontor_auctions %}
+            <div class="bg-slate-900/90 border {% if a.has_controller %}border-amber-500/40{% else %}border-slate-800{% endif %} rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4">
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xl">🏛️</span>
+                            <div>
+                                <div class="flex items-center space-x-2">
+                                    <h4 class="text-base font-bold text-slate-100">{{ a.region_name }}</h4>
+                                    <span class="px-2 py-0.5 rounded bg-slate-800 text-amber-300 font-mono text-xs font-bold border border-slate-700">
+                                        [{{ a.region_tag }}]
+                                    </span>
+                                </div>
+                                <p class="text-[11px] text-slate-400 mt-0.5">{{ a.region_desc }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Current Controlling Guild Status -->
+                    <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-1 text-xs">
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400 text-[11px] uppercase font-bold tracking-wider">Regierende Gilde:</span>
+                            {% if a.has_controller %}
+                            <span class="inline-flex items-center space-x-1 font-bold text-amber-300">
+                                <span>👑</span>
+                                <span>{{ a.controller_guild_name }} [{{ a.controller_guild_tag }}]</span>
+                            </span>
+                            {% else %}
+                            <span class="text-slate-500 italic">Keine (Neutraler Hansekontor)</span>
+                            {% endif %}
+                        </div>
+                        {% if a.has_controller %}
+                        <div class="flex justify-between items-center text-[11px] text-slate-400 pt-1 border-t border-slate-800/60">
+                            <span>Amtszeit verbleibend:</span>
+                            <span class="font-mono text-slate-200">{{ a.reign_countdown }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Active Auction Details -->
+                    <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-2 text-xs">
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400 text-[11px] uppercase font-bold tracking-wider">Auktions-Status:</span>
+                            <span class="font-mono text-amber-400 font-bold">Ablauf in {{ a.auction_countdown }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400">Aktuelles Höchstgebot:</span>
+                            <span class="font-mono font-bold text-emerald-400">
+                                {% if a.current_highest_bid > 0 %}
+                                {{ "%.2f"|format(a.current_highest_bid) }} Taler
+                                {% if a.highest_bidder_tag %}
+                                <span class="text-slate-400 text-[11px]">([{{ a.highest_bidder_tag }}])</span>
+                                {% endif %}
+                                {% else %}
+                                0.00 Taler (Kein Gebot)
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-2.5 bg-slate-950/40 border border-slate-800/40 rounded-xl text-center text-[11px] text-slate-500">
+                    Tretet einer Gilde bei oder gründet eine eigene, um an Kontor-Auktionen teilzunehmen.
+                </div>
+            </div>
+            {% endfor %}
         </div>
     </div>
     {% endif %}

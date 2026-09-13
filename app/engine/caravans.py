@@ -10,6 +10,7 @@ from app.config import (
 )
 from app.engine.production import get_effective_storage_cap
 from app.engine.notifications import create_notification
+from app.engine.auctions import get_user_travel_speed_multiplier
 
 
 def calculate_distance(x1: int, y1: int, x2: int, y2: int) -> float:
@@ -165,7 +166,9 @@ def dispatch_caravan(
 
     # 5. Calculate transit duration and arrival timestamp
     distance = calculate_distance(origin_x, origin_y, dest_region["coord_x"], dest_region["coord_y"])
-    duration_seconds = calculate_travel_duration(distance)
+    base_duration = calculate_travel_duration(distance)
+    speed_mult = get_user_travel_speed_multiplier(cur, user_id, origin_region_id, destination_region_id)
+    duration_seconds = max(1, int(round(base_duration * speed_mult)))
     departure_at = datetime.now(timezone.utc)
     arrival_at = departure_at + timedelta(seconds=duration_seconds)
 
@@ -437,17 +440,22 @@ def get_expeditions_overview(cur, user_id: int) -> Dict[str, Any]:
     # 2. Fetch foreign destination regions
     cur.execute(
         """
-        SELECT id, name, tag, description, coord_x, coord_y, resource_multipliers
-        FROM regions
-        WHERE id != %s
-        ORDER BY id ASC
+        SELECT r.id, r.name, r.tag, r.description, r.coord_x, r.coord_y, r.resource_multipliers,
+               cg.tag AS controller_guild_tag, cg.name AS controller_guild_name
+        FROM regions r
+        LEFT JOIN regional_controllers rc ON rc.region_id = r.id AND rc.valid_until > NOW()
+        LEFT JOIN guilds cg ON cg.id = rc.guild_id
+        WHERE r.id != %s
+        ORDER BY r.id ASC
         """,
         (home_id,),
     )
     foreign_regions = []
     for row in cur.fetchall():
         dist = calculate_distance(home_x, home_y, row["coord_x"], row["coord_y"])
-        dur = calculate_travel_duration(dist)
+        base_dur = calculate_travel_duration(dist)
+        speed_mult = get_user_travel_speed_multiplier(cur, user_id, home_id, row["id"])
+        dur = max(1, int(round(base_dur * speed_mult)))
         mults = row["resource_multipliers"] if isinstance(row["resource_multipliers"], dict) else json.loads(row["resource_multipliers"])
         foreign_regions.append({
             "id": row["id"],
@@ -458,6 +466,10 @@ def get_expeditions_overview(cur, user_id: int) -> Dict[str, Any]:
             "coord_y": row["coord_y"],
             "distance": dist,
             "duration_seconds": dur,
+            "speed_mult": speed_mult,
+            "has_speed_bonus": speed_mult < 1.0,
+            "controller_guild_tag": row["controller_guild_tag"],
+            "controller_guild_name": row["controller_guild_name"],
             "resource_multipliers": mults,
         })
 

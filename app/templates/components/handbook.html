@@ -54,6 +54,9 @@
                 <a href="#handbuch-expeditionen" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
                     8. Übersee-Expeditionen & Depots
                 </a>
+                <a href="#handbuch-auktionen" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
+                    9. Marktschutz & Kontor-Auktionen
+                </a>
             </div>
         </div>
 
@@ -335,6 +338,62 @@
                         <span class="font-semibold text-slate-200 block">Ausländische Regionaldepots:</span>
                         <p class="text-[11px] text-slate-400 leading-relaxed">
                             Nach Ablauf der Reisezeit trifft die Karawane in der Zielstadt ein. Mit einem Klick auf <em>„Waren im Depot entladen“</em> werden die Güter sicher im dortigen Regionaldepot des Kaufmanns deponiert. Über die Funktion <em>„Depot in Kontor überführen“</em> können eingelagerte Güter jederzeit zurück in das Heimatkontor geholt werden (beschränkt durch das Lagerlimit des Zentrallagers).
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 9. Marktschutz (Preisspannen) & Kontor-Auktionen -->
+            <section id="handbuch-auktionen" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex items-center space-x-2 border-b border-slate-800 pb-3">
+                    <span class="text-xl">👑</span>
+                    <h3 class="text-base font-bold text-slate-100">9. Marktschutz (Preisspannen) & Kontor-Auktionen</h3>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Um die Hansewirtschaft vor extremen Marktmanipulationen, Fehlplatzierungen und Marktversagen zu schützen, greifen dynamische Preiskorridore und territoriale Bündnisprivilegien ineinander.
+                </p>
+
+                <!-- Circuit Breaker -->
+                <div class="space-y-2">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400">Dynamische Volatilitäts-Preisspannen (Circuit Breakers)</h4>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Jede Handelsware besitzt ein dynamisches Preisband um ihren 24-Stunden-Volumengewichteten Durchschnittspreis (VWAP). Wurde die Ware in den letzten 24 Stunden nicht gehandelt, dient der historische Hanse-Referenzpreis als Anker:
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
+                        <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-rose-300 space-y-1">
+                            <div class="text-[10px] uppercase font-bold text-slate-400">Preisuntergrenze (Floor):</div>
+                            <div>Untergrenze = round(0.50 × Referenzpreis, 2)</div>
+                        </div>
+                        <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-emerald-300 space-y-1">
+                            <div class="text-[10px] uppercase font-bold text-slate-400">Preisobergrenze (Ceiling):</div>
+                            <div>Obergrenze = round(2.00 × Referenzpreis, 2)</div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-400 italic">
+                        * Aufträge außerhalb dieses Korridors werden von der Handelsbörse mit HTTP 422 abgewiesen.
+                    </p>
+                </div>
+
+                <!-- Kontor-Auktionen & Bündnisprivilegien -->
+                <div class="space-y-2 pt-3 border-t border-slate-800">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400">Gildenkasse, Kontor-Auktionen & Territorialherrschaft</h4>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Gilden bündeln Taler in ihrer <strong>Gildenkasse (Kriegskasse)</strong> durch freiwillige Einzahlungen ihrer Kaufleute. In 7-Tage-Zyklen können Gildenmeister und Offiziere um die Herrschaft über die 4 Hansekontore (Danzig, Visby, Brügge, Köln) bieten.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
+                        <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-amber-300 space-y-1">
+                            <div class="text-[10px] uppercase font-bold text-slate-400">Reisedauer-Bonus (Transit):</div>
+                            <div class="font-sans text-xs">Karawanen aller Gildenmitglieder reisen <strong>25% schneller</strong> (Reisedauer × 0.75) von und zu kontrollierten Regionen.</div>
+                        </div>
+                        <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-emerald-400 space-y-1">
+                            <div class="text-[10px] uppercase font-bold text-slate-400">Handelszoll-Dividende:</div>
+                            <div class="font-sans text-xs"><strong>0.5% des Handelswerts</strong> jeder in der Region abgewickelten Börsenorder fließt direkt in die Gildenkasse der regierenden Gilde.</div>
+                        </div>
+                    </div>
+                    <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-400 space-y-1">
+                        <span class="font-semibold text-slate-200 block">Gebotslogik & Sofortige Rückerstattung:</span>
+                        <p class="text-[11px] leading-relaxed">
+                            Erhöht eine Gilde ihr eigenes Gebot, wird nur die Differenz aus der Gildenkasse abgebucht. Wird eine Gilde von einem Rivalen überboten, wird der volle Betrag des bisherigen Höchstgebots augenblicklich und atomar in die Gildenkasse des Vorbieters zurückerstattet.
                         </p>
                     </div>
                 </div>

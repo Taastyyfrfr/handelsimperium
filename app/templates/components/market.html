@@ -116,18 +116,25 @@
 
                     <!-- Limit Price Input -->
                     <div>
-                        <div class="flex justify-between items-center mb-1">
+                        <div class="flex flex-wrap justify-between items-center gap-1 mb-1">
                             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Limitpreis je Einheit</label>
-                            {% if vwap_24h %}
-                            <span class="text-[10px] text-amber-400 font-mono">VWAP: {{ "%.2f"|format(vwap_24h) }}</span>
-                            {% endif %}
+                            <div class="flex items-center space-x-2 text-[10px] font-mono">
+                                {% if vwap_24h %}
+                                <span class="text-emerald-400">VWAP: {{ "%.2f"|format(vwap_24h) }}</span>
+                                {% endif %}
+                                {% if price_floor and price_ceiling %}
+                                <span class="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 font-bold" title="Circuit Breaker: 0.5x bis 2.0x Referenzpreis">
+                                     Spanne: {{ "%.2f"|format(price_floor) }} - {{ "%.2f"|format(price_ceiling) }}
+                                </span>
+                                {% endif %}
+                            </div>
                         </div>
-                        <input type="number" step="0.05" min="0.01" max="1000000" name="limit_price" id="order-limit-price-input" value="{% if vwap_24h %}{{ vwap_24h }}{% elif last_price %}{{ last_price }}{% else %}5.00{% endif %}" required
+                        <input type="number" step="0.05" {% if price_floor %}min="{{ price_floor }}"{% endif %} {% if price_ceiling %}max="{{ price_ceiling }}"{% endif %} name="limit_price" id="order-limit-price-input" value="{% if vwap_24h %}{{ vwap_24h }}{% elif last_price %}{{ last_price }}{% elif ref_price %}{{ ref_price }}{% else %}4.00{% endif %}" required
                                class="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-slate-100 font-mono text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition">
                     </div>
 
                     <p class="text-[11px] text-slate-500 leading-relaxed italic">
-                        * Bei Kauf wird Treuhandguthaben reserviert. Bei Verkauf werden Rohstoffe im Lager gebunden.
+                        * Bei Kauf wird Treuhandguthaben reserviert. Bei Verkauf werden Rohstoffe im Lager gebunden. Limitpreise müssen innerhalb der zulässigen Preisspanne liegen.
                     </p>
 
                     <button type="submit"
@@ -160,6 +167,16 @@
                         <span class="text-[10px] text-slate-400 block uppercase">24h-Volumen</span>
                         <span class="text-sm font-black font-mono text-slate-200 mt-0.5 block">
                             {{ "%.0f"|format(volume_24h) }}
+                        </span>
+                    </div>
+
+                    <div class="col-span-3 bg-slate-950 px-3.5 py-2 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+                        <span class="text-slate-400 font-semibold flex items-center space-x-1.5">
+                            <span>🛡️</span>
+                            <span>Preisspanne (Circuit Breaker):</span>
+                        </span>
+                        <span class="font-mono text-amber-300 font-bold">
+                            {{ "%.2f"|format(price_floor) }} – {{ "%.2f"|format(price_ceiling) }} Taler
                         </span>
                     </div>
                 </div>

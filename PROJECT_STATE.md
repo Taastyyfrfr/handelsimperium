@@ -1,8 +1,8 @@
 # Project State: Handelsimperium
 
-**Generated:** 2026-09-12T22:42:00+02:00  
+**Generated:** 2026-09-13T10:00:00+02:00  
 **Repository Branch:** `master`  
-**Current Phase:** Phase 9 (Caravan Expeditions, Travel Durations & Regional Depots)  
+**Current Phase:** Phase 10 (Dynamic Price Bands, Guild Territory & Kontor Auctions)  
 **Production Host:** `80.158.79.44` (`ssh server`)  
 **Public Endpoint:** [http://80.158.79.44/](http://80.158.79.44/)
 
@@ -162,7 +162,7 @@
 - *Index:* `idx_guild_projects_lookup ON (guild_id, is_completed)`
 - *Index:* `idx_guild_projects_perk ON (guild_id, project_type, is_completed)`
 
-### 2.14 `user_tutorials` (Phase 7 & Phase 9)
+### 2.14 `user_tutorials` (Phase 7, 9 & 10)
 - `user_id`: `INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE`
 - `current_step`: `INT NOT NULL DEFAULT 1`
 - `completed_steps`: `JSONB NOT NULL DEFAULT '[]'::jsonb`
@@ -192,6 +192,35 @@
 - `last_updated_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - *Constraint:* `UNIQUE (user_id, region_id, resource_type)`
 - *Index:* `idx_regional_depots_user_region ON regional_depots(user_id, region_id)`
+
+### 2.17 `kontor_auctions` (Phase 10)
+- `id`: `SERIAL PRIMARY KEY`
+- `region_id`: `INT NOT NULL REFERENCES regions(id)`
+- `start_time`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- `end_time`: `TIMESTAMPTZ NOT NULL` (7-day epoch)
+- `current_highest_bid`: `NUMERIC(14, 2) NOT NULL DEFAULT 0.0`
+- `highest_bidder_guild_id`: `INT REFERENCES guilds(id) ON DELETE SET NULL`
+- `status`: `VARCHAR(16) NOT NULL DEFAULT 'ACTIVE'` (`ACTIVE`, `RESOLVED`, `CANCELLED`)
+- `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- *Constraint:* `CHECK (status IN ('ACTIVE', 'RESOLVED', 'CANCELLED'))`
+- *Index:* `idx_kontor_auctions_region_status ON kontor_auctions(region_id, status)`
+- *Index:* `idx_kontor_auctions_end_status ON kontor_auctions(end_time, status)`
+
+### 2.18 `regional_controllers` (Phase 10)
+- `region_id`: `INT PRIMARY KEY REFERENCES regions(id)`
+- `guild_id`: `INT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE`
+- `winning_bid`: `NUMERIC(14, 2) NOT NULL`
+- `assigned_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- `valid_until`: `TIMESTAMPTZ NOT NULL`
+- *Index:* `idx_regional_controllers_valid ON regional_controllers(guild_id, valid_until)`
+
+### 2.19 `guild_contributions` (Phase 10)
+- `id`: `SERIAL PRIMARY KEY`
+- `guild_id`: `INT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE`
+- `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
+- `amount`: `NUMERIC(14, 2) NOT NULL`
+- `contributed_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- *Index:* `idx_guild_contributions_lookup ON guild_contributions(guild_id, user_id)`
 
 ---
 
@@ -229,7 +258,7 @@ $$\text{SunkCapital}(b, L) = \sum_{k=1}^{L-1} \left[ \text{cost}_{\text{balance}
 
 ### 3.7 Caravan Transit & Regional Logistics (Phase 9)
 $$\text{distance} = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2} \quad \text{[in Seemeilen / sm, gerundet auf 2 Dezimalstellen]}$$
-$$\text{duration\_seconds} = \text{round}(\text{distance} \times 12.0)$$
+$$\text{duration\_seconds} = \text{round}(\text{distance} \times 12.0 \times \text{SpeedMultiplier})$$
 $$\text{arrival\_at} = \text{departure\_at} + \Delta t_{\text{duration}}$$
 $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \quad \text{[Max. Karawanen-Zuladung]}$$
 
@@ -237,6 +266,21 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
 - **Deterministic Arrival Resolution:** On queries or actions, status transitions from `EN_ROUTE` to `ARRIVED` whenever `NOW() >= arrival_at`.
 - **Regional Depots:** Arrived caravans unload goods into the destination region's `regional_depots` record via atomic upsert (`ON CONFLICT (user_id, region_id, resource_type) DO UPDATE`).
 - **Kontor Transfer:** Stockpiled depot commodities can be transferred back into the home Kontor warehouse, bounded by available warehouse storage capacity.
+
+### 3.8 Dynamic Price Bands & Kontor Territory Privileges (Phase 10)
+- **Dynamic Price Bands (Market Volatility Circuit Breakers):**
+  $$\text{ReferencePrice}(r) = \begin{cases} \text{VWAP}_{24h}(r) & \text{if volume}_{24h}(r) > 0 \\ \text{BasePrice}(r) & \text{otherwise} \end{cases}$$
+  $$\text{Price Floor}(r) = \text{round}(0.50 \times \text{ReferencePrice}(r), 2)$$
+  $$\text{Price Ceiling}(r) = \text{round}(2.00 \times \text{ReferencePrice}(r), 2)$$
+  $$\text{Valid Limit Order Price} \in [\text{Price Floor}(r), \text{Price Ceiling}(r)]$$
+  Orders submitted outside the corridor are rejected with HTTP 422 (`Handelsspanne überschritten: Das Angebot weicht zu stark vom 24h-Marktwert ab`).
+- **Kontor Auction Bidding & Atomic Outbid Refunds:**
+  $$\text{Minimum Bid} = \begin{cases} 100.00 \text{ Taler} & \text{if } \text{current\_highest\_bid} == 0.0 \\ \text{current\_highest\_bid} + 50.00 \text{ Taler} & \text{otherwise} \end{cases}$$
+  Bids are funded from the Guild Bank (War Chest) with atomic escrow. If a guild is outbid, its previous bid is immediately and atomically refunded back into its `guild_bank.balance`.
+- **Territorial Privileges of the Regional Controller:**
+  - **25% Expedition Transit Speedup:** Caravans departing from or heading toward a region controlled by the merchant's guild receive a $0.75\times$ duration reduction ($\text{SpeedMultiplier} = 0.75$):
+    $$\text{duration}_{\text{effective}} = \max(1, \text{round}(\text{duration}_{\text{base}} \times 0.75))$$
+  - **0.5% Regional Trade Tax Dividend:** For every executed market trade where the seller belongs to the controlled region, $0.5\%$ of the total trade value is automatically credited to the controlling guild's bank treasury.
 
 ---
 
@@ -328,17 +372,38 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
   - Interactive expedition console with destination selector, real-time cargo total calculation, and 250-unit capacity guard.
   - Foreign regional depots overview with single-click "Depot in Kontor überführen" action.
 - **Synchronized Tutorial & Living Handbook:**
-  - Tutorial Step 6 ("6. Die erste Expedition"): Disburses 100.00 Taler & 30.00 Tuch upon dispatching an overseas expedition, completing the 6-step merchant curriculum.
+  - Tutorial Step 6 ("6. Die erste Expedition"): Disburses 100.00 Taler & 30.00 Tuch upon dispatching an overseas expedition.
   - Merchant Handbook (`/handbuch`): Added Section 8 ("Logistik, Übersee-Expeditionen & Regionaldepots") with formulas, capacity limits, and depot mechanics.
+
+### Phase 10: Dynamic Price Bands, Guild Territory & Kontor Auctions
+- **Database Migration (`009_phase10_auctions.sql`):**
+  - `kontor_auctions`: 7-day cyclical bidding epochs for territorial control over each region with current bid, highest bidder guild, and status.
+  - `regional_controllers`: Tracks active guild sovereignty, winning bid amount, and validity expiration per region.
+  - `guild_contributions`: Audit ledger recording user donations into their guild's War Chest treasury.
+- **Dynamic Price Corridor Engine (`app/engine/matching.py`):**
+  - Circuit breakers strictly enforce $[0.50 \times \text{VWAP}_{24h}, 2.00 \times \text{VWAP}_{24h}]$ corridor, falling back to base reference prices when 24h trading volume is zero.
+  - `POST /market/orders` rejects outlier orders with HTTP 422 and renders warning toast.
+  - Order form displays dynamic admissible price corridor guidance for selected commodity.
+- **War Chest Treasury & Kontor Auction Engine (`app/engine/auctions.py`):**
+  - `POST /guilds/bank/deposit`: Deducts merchant balance, increments `guild_bank.balance`, and logs contribution record.
+  - `POST /guilds/auctions/{id}/bid`: Places alliance bid from guild war chest; enforces minimum bid (100 Taler or current bid + 50 Taler); executes instant atomic refund to previous highest bidder guild.
+  - `resolve_kontor_auctions`: Deterministically concludes expired auctions, crowns controlling guild in `regional_controllers` for 7 days, and instantiates next auction epoch.
+- **Territorial Privileges & Royal UI Badging:**
+  - **Transit Speedup:** 25% duration reduction ($0.75\times$) for caravans travelling to/from controlled territories.
+  - **Trade Tax Dividend:** 0.5% regional trade dividend credited to controlling guild's treasury on market sales.
+  - Crown badges (`👑 [TAG]`) render next to controlling regions on top nav bar, expedition cards, and Kontor screens.
+- **Synchronized Tutorial & Handbook:**
+  - Tutorial Step 7 ("7. Die Macht der Hanse"): Disburses 200.00 Taler & 40.00 Eisen upon founding or joining an alliance.
+  - Merchant Handbook (`/handbuch`): Section 9 ("Territoriale Kontrolle, Kontor-Auktionen & Kriegskasse") details price band math, auction mechanics, outbid guarantees, and territorial perks.
 
 ---
 
 ## 5. Test Suite Metrics
 
 All tests execute cleanly directly against PostgreSQL on the production server:
-- **Total Test Files:** 12
-- **Total Tests:** 48
-- **Pass Rate:** 100% (48 passed in 9.04s)
+- **Total Test Files:** 13
+- **Total Tests:** 55
+- **Pass Rate:** 100% (55 passed in 15.07s)
 
 | Test File | Tests | Coverage Scope |
 | :--- | :--- | :--- |
@@ -349,9 +414,10 @@ All tests execute cleanly directly against PostgreSQL on the production server:
 | `tests/test_phase4_features.py` | 5 | Net worth math, capital conservation, ranking cache, CSRF middleware, PWA assets |
 | `tests/test_phase5_features.py` | 4 | Export contracts, trade notification dispatch, economic telemetry, HTMX flow |
 | `tests/test_phase6_guilds.py` | 5 | Guild founding, succession, monument contributions, Freihafen fee perk, Speicherstadt cap perk, HTMX flow |
-| `tests/test_phase7_tutorial.py` | 4 | 6-step tutorial quest progression & rewards, duplicate claim prevention, handbook accuracy, SVG template integrity |
+| `tests/test_phase7_tutorial.py` | 4 | Tutorial quest progression & rewards, duplicate claim prevention, handbook accuracy, SVG template integrity |
 | `tests/test_phase8_regions.py` | 6 | Registration validation, regional yield scaling, 0.0-yield upgrade blocking, warehouse universal upgrades, matrix & UI badges |
 | `tests/test_phase9_caravans.py` | 6 | Euclidean distance & transit duration math, capacity limits, atomic deduction, arrival status resolution, depot unloading & transfer, tutorial step 6 claim, HTTP rendering |
+| `tests/test_phase10_auctions_and_limits.py` | 7 | Dynamic price bands [0.5x, 2.0x VWAP], War Chest deposits, Kontor auction bidding & outbid refund, epoch resolution, speed bonuses, regional trade tax dividends, tutorial step 7, HTTP endpoints |
 | `tests/test_production.py` | 2 | Offline production delta calculation and storage cap enforcement |
 | `tests/test_progression_and_cancel.py` | 5 | Multi-resource upgrade sufficiency/rollback, warehouse cap, aggregated depth |
 
@@ -359,6 +425,7 @@ All tests execute cleanly directly against PostgreSQL on the production server:
 
 ## 6. Outstanding Backlog & Roadmap
 
-1. **Dynamic Price Bands & Volatility Limits:** Circuit breakers preventing drastic market manipulation during sudden low-liquidity shocks.
-2. **Guild Treasury War Chest & Territory Auctions:** Alliances bid on regional trading posts and port monopolies.
-3. **Automated Continuous Integration (CI):** GitHub Actions workflow running `pytest` against test PostgreSQL containers on pull requests.
+1. **Automated Continuous Integration (CI):** GitHub Actions workflow running `pytest` against ephemeral PostgreSQL test containers on pull requests.
+2. **Automated NPC Caravans & Hanseatic Trade Convoys:** Dynamic scheduled NPC cargo fleets navigating between regional Kontors to stimulate trade volume and provide counterparty liquidity.
+3. **Naval Blockades & Piracy Risk Events:** Dynamic sea-lane hazard conditions modifying caravan transit durations and cargo insurance mechanisms.
+4. **Historical Price Charts & Candlesticks:** Lightweight client-side charting of price discovery history and 24h VWAP trends using canvas/SVG.

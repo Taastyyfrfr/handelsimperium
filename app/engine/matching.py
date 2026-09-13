@@ -1,9 +1,43 @@
 from decimal import Decimal
-from typing import Dict, Any, List, Optional
-from app.config import settings
+from typing import Dict, Any, List, Optional, Tuple
+from app.config import settings, REFERENCE_PRICES
 from app.engine.production import calculate_offline_production
 from app.engine.notifications import create_notification
 from app.engine.guilds import has_guild_perk
+from app.engine.auctions import credit_regional_trade_tax
+
+
+def get_price_corridor(cur, resource_type: str) -> Tuple[float, float, float]:
+    """
+    Computes dynamic price corridor (volatility circuit breaker):
+    Price Floor = round(0.50 * ReferencePrice, 2)
+    Price Ceiling = round(2.00 * ReferencePrice, 2)
+    where ReferencePrice is 24h-VWAP (fallback to canonical REFERENCE_PRICES if 24h volume is 0).
+    Returns (floor, ceiling, reference_price).
+    """
+    cur.execute(
+        """
+        SELECT 
+            COALESCE(SUM(price * amount) / NULLIF(SUM(amount), 0), 0) AS vwap,
+            COALESCE(SUM(amount), 0) AS volume_24h
+        FROM trades
+        WHERE resource_type = %s AND executed_at >= NOW() - INTERVAL '24 HOURS'
+        """,
+        (resource_type,),
+    )
+    row = cur.fetchone()
+    vwap_val = float(row["vwap"]) if row and row["vwap"] is not None else 0.0
+    vol_val = float(row["volume_24h"]) if row and row["volume_24h"] is not None else 0.0
+
+    if vol_val > 0 and vwap_val > 0:
+        ref_price = round(vwap_val, 2)
+    else:
+        ref_price = REFERENCE_PRICES.get(resource_type, 5.00)
+
+    floor = round(0.50 * ref_price, 2)
+    ceiling = round(2.00 * ref_price, 2)
+    return floor, ceiling, ref_price
+
 
 def place_and_match_order(
     cur,
@@ -16,6 +50,7 @@ def place_and_match_order(
     """
     Atomically places a limit order and executes matches using SELECT ... FOR UPDATE.
     Deducts a 2% market fee on executed trades.
+    Enforces dynamic price corridor [0.50 * VWAP, 2.00 * VWAP].
     """
     order_type = order_type.upper()
     if order_type not in ("BUY", "SELL"):
@@ -34,6 +69,13 @@ def place_and_match_order(
         raise ValueError("Limit-Preis muss größer als 0 sein.")
     if limit_price > 1_000_000.0:
         raise ValueError("Limit-Preis darf maximal 1.000.000,00 Taler betragen.")
+
+    # Volatility circuit breaker: validate against dynamic price corridor
+    floor, ceiling, ref_price = get_price_corridor(cur, resource_type)
+    if limit_price < floor or limit_price > ceiling:
+        raise ValueError(
+            f"Limitpreis liegt außerhalb der zulässigen Handelsspanne ({floor:.2f} - {ceiling:.2f} Taler)."
+        )
 
 
     # Always ensure user has fresh production calculated before placing order
@@ -153,6 +195,9 @@ def place_and_match_order(
             )
             trade_rec = cur.fetchone()
 
+            # Regional tax dividend for controlling guild (0.5% of trade value)
+            credit_regional_trade_tax(cur, seller_id, trade_value)
+
             # Update maker order
             new_maker_filled = round(float(maker["filled_amount"]) + trade_qty, 2)
             maker_status = "FILLED" if new_maker_filled >= float(maker["amount"]) else "ACTIVE"
@@ -267,6 +312,9 @@ def place_and_match_order(
                 (buyer_id, user_id, resource_type, trade_qty, exec_price, fee),
             )
             trade_rec = cur.fetchone()
+
+            # Regional tax dividend for controlling guild (0.5% of trade value)
+            credit_regional_trade_tax(cur, user_id, trade_value)
 
             # Update maker order
             new_maker_filled = round(float(maker["filled_amount"]) + trade_qty, 2)

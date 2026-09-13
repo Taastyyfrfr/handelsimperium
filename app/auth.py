@@ -33,9 +33,13 @@ def get_user_by_id(cur, user_id: int) -> Optional[Dict[str, Any]]:
         SELECT u.id, u.username, u.balance, u.created_at, u.region_id,
                r.name AS region_name, r.tag AS region_tag, r.description AS region_description,
                r.coord_x AS region_coord_x, r.coord_y AS region_coord_y,
-               r.resource_multipliers AS region_multipliers
+               r.resource_multipliers AS region_multipliers,
+               cg.name AS controller_guild_name,
+               cg.tag AS controller_guild_tag
         FROM users u
         LEFT JOIN regions r ON r.id = u.region_id
+        LEFT JOIN regional_controllers rc ON rc.region_id = r.id AND rc.valid_until > NOW()
+        LEFT JOIN guilds cg ON cg.id = rc.guild_id
         WHERE u.id = %s
         """,
         (user_id,),

@@ -92,7 +92,7 @@ def test_tutorial_progression_and_rewards(db_conn):
         db_conn.rollback()
 
         # Place an active order
-        place_and_match_order(cur, u_id, "SELL", "wood", 5.0, 20.00)
+        place_and_match_order(cur, u_id, "SELL", "wood", 5.0, 5.00)
         db_conn.commit()
         assert is_step_eligible(cur, u_id, 3) is True
 
@@ -111,7 +111,7 @@ def test_tutorial_progression_and_rewards(db_conn):
         # 4. Step 4: Requires caravan or >= 2 orders. (User currently has 1 order)
         assert is_step_eligible(cur, u_id, 4) is False
         # Place second order
-        place_and_match_order(cur, u_id, "SELL", "stone", 5.0, 20.00)
+        place_and_match_order(cur, u_id, "SELL", "stone", 5.0, 5.00)
         db_conn.commit()
         assert is_step_eligible(cur, u_id, 4) is True
 
@@ -156,11 +156,28 @@ def test_tutorial_progression_and_rewards(db_conn):
         db_conn.commit()
         assert is_step_eligible(cur, u_id, 6) is True
 
-        # Claim Step 6 (Final Step: 100 Taler & 30 Cloth)
+        # Claim Step 6 (100 Taler & 30 Cloth)
         res6 = claim_tutorial_reward(cur, u_id)
         db_conn.commit()
         assert res6["claimed_step"] == 6
-        assert res6["is_finished"] is True
+        assert res6["next_step"] == 7
+        assert res6["is_finished"] is False
+
+        # Step 7: Macht der Hanse (user is already leader of TutorialGuild_{ts})
+        assert is_step_eligible(cur, u_id, 7) is True
+
+        # Claim Step 7 (Final Step: 200 Taler & 40 Eisen)
+        cur.execute("SELECT balance FROM users WHERE id = %s", (u_id,))
+        bal_before_s7 = float(cur.fetchone()["balance"])
+        res7 = claim_tutorial_reward(cur, u_id)
+        db_conn.commit()
+        assert res7["claimed_step"] == 7
+        assert res7["is_finished"] is True
+
+        cur.execute("SELECT balance FROM users WHERE id = %s", (u_id,))
+        assert float(cur.fetchone()["balance"]) == round(bal_before_s7 + 200.0, 2)
+        cur.execute("SELECT amount FROM inventories WHERE user_id = %s AND resource_type = 'iron'", (u_id,))
+        assert float(cur.fetchone()["amount"]) >= 40.0
 
         # Further claims rejected
         with pytest.raises(ValueError, match="vollständig abgeschlossen"):

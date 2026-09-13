@@ -227,7 +227,7 @@ def test_freihafen_market_fee_perk(db_conn):
         cur.execute("INSERT INTO users (username, password_hash, balance) VALUES (%s, 'hash', 1000.0) RETURNING id", (seller_guild_name,))
         seller_g_id = cur.fetchone()["id"]
         ensure_user_entities(cur, seller_g_id)
-        cur.execute("UPDATE inventories SET amount = 100.0 WHERE user_id = %s AND resource_type = 'wood'", (seller_g_id,))
+        cur.execute("UPDATE inventories SET amount = 100.0 WHERE user_id = %s AND resource_type = 'iron'", (seller_g_id,))
 
         g_info = create_guild(cur, seller_g_id, f"GuildFrei_{ts}", f"F{str(ts)[-4:]}")
         # Directly mark FREIHAFEN as completed
@@ -240,28 +240,30 @@ def test_freihafen_market_fee_perk(db_conn):
         cur.execute("INSERT INTO users (username, password_hash, balance) VALUES (%s, 'hash', 500.0) RETURNING id", (seller_standard_name,))
         seller_std_id = cur.fetchone()["id"]
         ensure_user_entities(cur, seller_std_id)
-        cur.execute("UPDATE inventories SET amount = 100.0 WHERE user_id = %s AND resource_type = 'wood'", (seller_std_id,))
+        cur.execute("UPDATE inventories SET amount = 100.0 WHERE user_id = %s AND resource_type = 'iron'", (seller_std_id,))
 
         # 3. Buyer
         cur.execute("INSERT INTO users (username, password_hash, balance) VALUES (%s, 'hash', 2000.0) RETURNING id", (buyer_name,))
         buyer_id = cur.fetchone()["id"]
         ensure_user_entities(cur, buyer_id)
+        # Clean up any lingering open iron orders to ensure clean test matches
+        cur.execute("DELETE FROM market_orders WHERE resource_type = 'iron'")
         db_conn.commit()
 
-        # Trade 1: Standard seller sells 10 wood at 10.00 Taler = 100.00 Taler trade value.
+        # Trade 1: Standard seller sells 10 iron at 10.00 Taler = 100.00 Taler trade value.
         # Fee should be standard 2.0% = 2.00 Taler.
-        place_and_match_order(cur, seller_std_id, "SELL", "wood", 10.0, 10.00)
-        res_trade1 = place_and_match_order(cur, buyer_id, "BUY", "wood", 10.0, 10.00)
+        place_and_match_order(cur, seller_std_id, "SELL", "iron", 10.0, 10.00)
+        res_trade1 = place_and_match_order(cur, buyer_id, "BUY", "iron", 10.0, 10.00)
         db_conn.commit()
 
         assert len(res_trade1["trades"]) == 1
         t1 = res_trade1["trades"][0]
         assert t1["fee"] == 2.00  # 2% of 100.00
 
-        # Trade 2: Guild seller with FREIHAFEN sells 10 wood at 10.00 Taler = 100.00 Taler trade value.
+        # Trade 2: Guild seller with FREIHAFEN sells 10 iron at 10.00 Taler = 100.00 Taler trade value.
         # Fee should be reduced 1.5% = 1.50 Taler!
-        place_and_match_order(cur, seller_g_id, "SELL", "wood", 10.0, 10.00)
-        res_trade2 = place_and_match_order(cur, buyer_id, "BUY", "wood", 10.0, 10.00)
+        place_and_match_order(cur, seller_g_id, "SELL", "iron", 10.0, 10.00)
+        res_trade2 = place_and_match_order(cur, buyer_id, "BUY", "iron", 10.0, 10.00)
         db_conn.commit()
 
         assert len(res_trade2["trades"]) == 1
