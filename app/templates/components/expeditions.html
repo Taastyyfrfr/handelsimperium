@@ -405,15 +405,20 @@
                             {% endfor %}
                         </div>
 
-                        <!-- Transfer to Kontor Action -->
-                        <form hx-post="/caravans/depots/{{ d.region_id }}/transfer"
+                        <!-- Return Expedition to Home Kontor Action -->
+                        <form hx-post="/caravans/dispatch"
                               hx-target="#main-panel"
                               hx-swap="innerHTML"
                               class="pt-1">
+                            <input type="hidden" name="origin_region_id" value="{{ d.region_id }}">
+                            <input type="hidden" name="destination_region_id" value="{{ overview.home_region.id }}">
+                            {% for r_name, r_amt in d.resources.items() %}
+                            <input type="hidden" name="cargo_{{ r_name }}" value="{{ r_amt }}">
+                            {% endfor %}
                             <button type="submit" 
                                     class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 font-semibold rounded-lg text-xs transition border border-slate-700 flex items-center justify-center space-x-1.5">
-                                {{ icons.nav("resources", "w-3.5 h-3.5") }}
-                                <span>Depot in Kontor überführen</span>
+                                {{ icons.nav("expeditions", "w-3.5 h-3.5") }}
+                                <span>Rückreise ins Kontor entsenden</span>
                             </button>
                         </form>
                     </div>

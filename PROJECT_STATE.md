@@ -1,8 +1,8 @@
 # Project State: Handelsimperium
 
-**Generated:** 2026-09-13T10:35:00+02:00  
+**Generated:** 2026-09-13T10:48:00+02:00  
 **Repository Branch:** `main`  
-**Current Phase:** Phase 10 (Dynamic Price Bands, Guild Territory & Kontor Auctions) + System Integrity Hardening  
+**Current Phase:** Phase 10 (Dynamic Price Bands, Guild Territory & Kontor Auctions) + Economic Integrity & Logistics Consistency Hardening  
 **Production Host:** `80.158.79.44` (`ssh server`)  
 **Public Endpoint:** [http://80.158.79.44/](http://80.158.79.44/)
 
@@ -170,7 +170,7 @@
 - `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - *Index:* `idx_user_tutorials_lookup ON (user_id, is_finished)`
 
-### 2.15 `caravans` (Phase 9)
+### 2.15 `caravans` (Phase 9 & Integrity Patch)
 - `id`: `SERIAL PRIMARY KEY`
 - `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
 - `origin_region_id`: `INT NOT NULL REFERENCES regions(id)`
@@ -183,7 +183,7 @@
 - *Constraint:* `CHECK (status IN ('EN_ROUTE', 'ARRIVED', 'UNLOADED', 'CANCELLED'))`
 - *Index:* `idx_caravans_user_status_arrival ON caravans(user_id, status, arrival_at)`
 
-### 2.16 `regional_depots` (Phase 9)
+### 2.16 `regional_depots` (Phase 9 & Integrity Patch)
 - `id`: `SERIAL PRIMARY KEY`
 - `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
 - `region_id`: `INT NOT NULL REFERENCES regions(id)`
@@ -193,11 +193,12 @@
 - *Constraint:* `UNIQUE (user_id, region_id, resource_type)`
 - *Index:* `idx_regional_depots_user_region ON regional_depots(user_id, region_id)`
 
-### 2.17 `kontor_auctions` (Phase 10)
+### 2.17 `kontor_auctions` (Phase 10 & Integrity Patch)
 - `id`: `SERIAL PRIMARY KEY`
 - `region_id`: `INT NOT NULL REFERENCES regions(id)`
 - `start_time`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
-- `end_time`: `TIMESTAMPTZ NOT NULL` (7-day epoch)
+- `end_time`: `TIMESTAMPTZ NOT NULL` (7-day epoch, synchronized with `epoch_end_at`)
+- `epoch_end_at`: `TIMESTAMPTZ NOT NULL`
 - `current_highest_bid`: `NUMERIC(14, 2) NOT NULL DEFAULT 0.0`
 - `highest_bidder_guild_id`: `INT REFERENCES guilds(id) ON DELETE SET NULL`
 - `status`: `VARCHAR(16) NOT NULL DEFAULT 'ACTIVE'` (`ACTIVE`, `RESOLVED`, `CANCELLED`)
@@ -226,19 +227,20 @@
 - `id`: `BIGSERIAL PRIMARY KEY`
 - `client_key`: `VARCHAR(128) NOT NULL`
 - `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
-- *Index:* `idx_rate_limits_key_time ON rate_limits(client_key, created_at DESC)`
+- *Composite Index:* `idx_rate_limits_client_key_created_at ON rate_limits (client_key, created_at DESC)`
 
 ---
 
 ## 3. Core Economic Equations
 
 ### 3.1 On-Demand Offline Production
-$$\Delta t = T_{now} - \text{last\_calculated\_at}$$
+$$\Delta t = \max(0.0, (T_{now} - \text{last\_calculated\_at}).\text{total\_seconds}())$$
 $$\text{amount}_{new} = \min(\text{storage\_cap}_{\text{effective}}, \text{amount}_{old} + (\Delta t \times \text{production\_rate}))$$
 
 ### 3.2 Warehouse Storage Scaling & Guild Speicherstadt Buff
 $$\text{storage\_cap}_{\text{base}}(\text{level}) = \text{round}(1000.0 \times 1.5^{\text{level} - 1})$$
 $$\text{storage\_cap}_{\text{effective}} = \begin{cases} \text{round}(\text{storage\_cap}_{\text{base}} \times 1.10) & \text{if member has active } \text{SPEICHERSTADT} \\ \text{storage\_cap}_{\text{base}} & \text{otherwise} \end{cases}$$
+$$\sum_{r \in \text{Commodities}} \text{amount}_r \le \text{storage\_cap}_{\text{effective}}$$
 
 ### 3.3 Building Upgrade Cost & Regional Production Rate Scaling
 $$\text{cost}_i(\text{level}) = \text{round}(\text{base\_cost}_i \times 1.5^{\text{level} - 1}, 2)$$
@@ -252,9 +254,10 @@ Warehouses (`Zentrallager`) have `resource = None` and remain upgradable across 
 $$\text{VWAP}_{24h}(r) = \frac{\sum_{t \in \text{Trades}_{24h}(r)} (\text{amount}_t \times \text{price}_t)}{\sum_{t \in \text{Trades}_{24h}(r)} \text{amount}_t}$$
 *Fallback Reference Prices:* Wood: 4.00, Stone: 5.00, Iron: 12.00, Grain: 3.00, Cloth: 8.00 Taler.
 
-### 3.5 3-Pillar Merchant Net Worth
-$$\text{Net Worth} = \text{Liquid Balance} + \sum_{r} (\text{inventory}_r \times \text{Price}(r)) + \sum_{b} \text{SunkCapital}(b, L)$$
-$$\text{SunkCapital}(b, L) = \sum_{k=1}^{L-1} \left[ \text{cost}_{\text{balance}}(b, k) + \sum_{r} (\text{cost}_{r}(b, k) \times \text{Price}(r)) \right]$$
+### 3.5 7-Pillar Merchant Net Worth (Phase 10 Integrity Patch)
+$$\text{Net Worth} = \text{Liquid Balance} + \text{Escrow}_{\text{BUY}} + \sum_{r} (\text{WarehouseInv}_r \times P(r)) + \sum_{r} (\text{Escrow}_{\text{SELL}}(r) \times P(r)) + \sum_{r} (\text{TransitCaravan}_r \times P(r)) + \sum_{r} (\text{Depot}_r \times P(r)) + \sum_{b} \text{SunkCapital}(b, L)$$
+$$\text{SunkCapital}(b, L) = \sum_{k=1}^{L-1} \left[ \text{cost}_{\text{balance}}(b, k) + \sum_{r} (\text{cost}_{r}(b, k) \times P(r)) \right]$$
+where $P(r)$ is the 24h-VWAP with fallback to the canonical reference price $\text{REFERENCE\_PRICES}[r]$.
 
 ### 3.6 Deflationary Sinks & Transaction Taxes
 - **Standard Market Fee:** $2.0\%$ deducted on executed maker/taker matches, burned permanently from circulation.
@@ -262,43 +265,49 @@ $$\text{SunkCapital}(b, L) = \sum_{k=1}^{L-1} \left[ \text{cost}_{\text{balance}
 - **Export Contracts ("Handelskarawanen"):** 3 daily contracts expiring midnight UTC; consumed resources are permanently deleted from circulation in exchange for guaranteed Taler payouts.
 - **Guild Founding Fee:** $500.00$ Taler permanently deducted upon founding an alliance.
 
-### 3.7 Caravan Transit & Regional Logistics (Phase 9)
+### 3.7 Caravan Transit & Regional Logistics (Phase 9 & Integrity Patch)
 $$\text{distance} = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2} \quad \text{[in Seemeilen / sm, gerundet auf 2 Dezimalstellen]}$$
 $$\text{duration\_seconds} = \text{round}(\text{distance} \times 12.0 \times \text{SpeedMultiplier})$$
 $$\text{arrival\_at} = \text{departure\_at} + \Delta t_{\text{duration}}$$
 $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \quad \text{[Max. Karawanen-Zuladung]}$$
 
-- **Atomic Inventory Deduction:** Cargo is locked and subtracted from Kontor inventory at departure via `SELECT ... FOR UPDATE`.
-- **Deterministic Arrival Resolution:** On queries or actions, status transitions from `EN_ROUTE` to `ARRIVED` whenever `NOW() >= arrival_at`.
-- **Regional Depots:** Arrived caravans unload goods into the destination region's `regional_depots` record via atomic upsert (`ON CONFLICT (user_id, region_id, resource_type) DO UPDATE`).
-- **Kontor Transfer:** Stockpiled depot commodities can be transferred back into the home Kontor warehouse, bounded by available warehouse storage capacity.
+- **Outbound & Return Expeditions:**
+  - *Outbound:* Dispatched from home region to a foreign destination; cargo is locked and deducted from Kontor inventories.
+  - *Return:* Dispatched from foreign depots back to home Kontor; cargo is locked and deducted from `regional_depots`.
+- **Atomic Unloading:**
+  - At foreign destinations: Unloaded into `regional_depots`, bounded by `REGIONAL_DEPOT_CAP = 500.0`.
+  - At home Kontor: Unloaded into `inventories`, bounded by cumulative effective warehouse storage capacity.
+- **Depot Teleportation Prohibited:** Instantaneous transfer route `POST /caravans/depots/{region_id}/transfer` is permanently removed. All goods must physically transit via caravans.
 
-### 3.8 Dynamic Price Bands & Kontor Territory Privileges (Phase 10)
+### 3.8 Dynamic Price Bands & Market Circuit Breakers (Phase 10)
 - **Dynamic Price Bands (Market Volatility Circuit Breakers):**
-  $$\text{ReferencePrice}(r) = \begin{cases} \text{VWAP}_{24h}(r) & \text{if volume}_{24h}(r) > 0 \\ \text{BasePrice}(r) & \text{otherwise} \end{cases}$$
+  $$\text{ReferencePrice}(r) = \begin{cases} \text{VWAP}_{24h}(r) & \text{if volume}_{24h}(r) > 0 \\ \text{LastPrice}(r) & \text{else if exists} \\ \text{BasePrice}(r) & \text{otherwise} \end{cases}$$
   $$\text{Price Floor}(r) = \text{round}(0.50 \times \text{ReferencePrice}(r), 2)$$
   $$\text{Price Ceiling}(r) = \text{round}(2.00 \times \text{ReferencePrice}(r), 2)$$
   $$\text{Valid Limit Order Price} \in [\text{Price Floor}(r), \text{Price Ceiling}(r)]$$
   Orders submitted outside the corridor are rejected with HTTP 422 (`Handelsspanne überschritten: Das Angebot weicht zu stark vom 24h-Marktwert ab`).
+
+### 3.9 Price Improvement Escrow Refunds & Wash-Trading Guard (Phase 10 Integrity Patch)
+- **Price Improvement Refund:**
+  When an aggressive buyer submits a limit order at $P_{\text{taker}} = P_{\text{limit}}$ that matches against a maker's resting sell order at $P_{\text{maker}} < P_{\text{limit}}$, the buyer receives an immediate atomic refund for the difference:
+  $$\text{Refund} = \text{matched\_amount} \times (P_{\text{limit}} - P_{\text{maker}})$$
+  This guarantees that buyer capital is never over-retained or leaked.
+- **Wash-Trading Guard:**
+  Orders that would cross and match against existing resting orders owned by the same user are strictly forbidden. The matching engine and route reject self-crossing orders with `ValueError` and HTTP 422:
+  > *"Eigenhandel ist an der Börse untersagt"*
+
+### 3.10 Kontor Auctions & Territorial Privileges
 - **Kontor Auction Bidding & Atomic Outbid Refunds:**
   $$\text{Minimum Bid} = \begin{cases} 100.00 \text{ Taler} & \text{if } \text{current\_highest\_bid} == 0.0 \\ \text{current\_highest\_bid} + 50.00 \text{ Taler} & \text{otherwise} \end{cases}$$
   Bids are funded from the Guild Bank (War Chest) with atomic escrow. If a guild is outbid, its previous bid is immediately and atomically refunded back into its `guild_bank.balance`.
 - **Territorial Privileges of the Regional Controller:**
-  - **25% Expedition Transit Speedup:** Caravans departing from or heading toward a region controlled by the merchant's guild receive a $0.75\times$ duration reduction ($\text{SpeedMultiplier} = 0.75$):
-    $$\text{duration}_{\text{effective}} = \max(1, \text{round}(\text{duration}_{\text{base}} \times 0.75))$$
-  - **0.5% Regional Trade Tax Dividend:** For every executed market trade where the seller belongs to the controlled region, $0.5\%$ of the total trade value is automatically credited to the controlling guild's bank treasury.
+  - **25% Expedition Transit Speedup:** Caravans departing from or heading toward a region controlled by the merchant's guild receive a $0.75\times$ duration reduction ($\text{SpeedMultiplier} = 0.75$).
+  - **0.5% Regional Trade Tax Dividend:** For every executed market trade where the seller belongs to the controlled region, $0.5\%$ of the total trade value is automatically credited to the controlling guild's bank treasury (null-safe if region is uncontrolled).
 
-### 3.9 Logistics Depot Storage Caps & Multi-Worker Rate Limiting (System Integrity Patch)
-- **Foreign Regional Depot Cap:**
-  $$\sum_{r \in \text{Resources}} \text{amount}_{\text{depot}}(u, \text{region}, r) \le 500.0 \quad (\text{settings.REGIONAL\_DEPOT\_CAP})$$
-  Caravan unloading requests that would cause total stored commodities in the destination region's depot to exceed 500 units are rejected with `ValueError` and HTTP 422 (`"Regionaldepot ist voll"`).
-- **Non-Negative Production Delta Floor:**
-  $$\Delta t = \max(0.0, (T_{now} - \text{last\_calculated\_at}).\text{total\_seconds}())$$
-  Protects against clock skew or future-dated timestamps to guarantee production delta is strictly non-negative ($\Delta t \ge 0.0$) and inventory levels never decrease from production ticks.
-- **PostgreSQL-Backed Sliding-Window Rate Limiter:**
-  - Synchronizes sliding-window request tracking across multiple Uvicorn worker processes via PostgreSQL table `rate_limits`.
-  - Serializes concurrent evaluation per client key using transaction-level advisory locking: `SELECT pg_advisory_xact_lock(hashtext(%s))`.
-  - Opportunistic background pruning (5% of requests) deletes expired entries older than 10 minutes.
+### 3.11 Database Rate Limiting & Rolling Maintenance
+- Sliding window tracking uses PostgreSQL `rate_limits` table with composite index `(client_key, created_at DESC)`.
+- Concurrent worker access is serialized per client key with transaction-level advisory locks `SELECT pg_advisory_xact_lock(hashtext(key))`.
+- Expired rate limit entries older than 1 hour are automatically pruned during evaluation and rolling maintenance (`prune_expired()`), preventing unbounded database table growth.
 
 ---
 
@@ -380,22 +389,21 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
 - **Logistics & Transit Engine (`app/engine/caravans.py`):**
   - `calculate_distance`: Euclidean metric $\sqrt{\Delta x^2 + \Delta y^2}$.
   - `calculate_travel_duration`: $\text{round}(\text{distance} \times 12.0)$ seconds.
-  - `dispatch_caravan`: Enforces 250-unit capacity cap, non-negative amounts, and distinct regions; atomically locks and deducts inventory from the Kontor warehouse.
+  - `dispatch_caravan`: Enforces 250-unit capacity cap, non-negative amounts, and distinct regions; supports outbound (warehouse deduction) and return (depot deduction) routes.
   - `resolve_caravan_statuses`: Transitions expired transit routes from `EN_ROUTE` to `ARRIVED` with `CARAVAN_ARRIVED` notifications.
-  - `unload_caravan`: Safely transfers cargo into `regional_depots` at destination and updates status to `UNLOADED`.
-  - `transfer_depot_to_kontor`: Moves stockpiled goods from foreign depots into Kontor inventories up to warehouse storage capacity.
+  - `unload_caravan`: Unloads into `regional_depots` at foreign destinations (capped at 500 units) or into `inventories` at home Kontor (capped at warehouse capacity).
 - **Frontend Logistics Terminal (`GET /expeditions` & `app/templates/components/expeditions.html`):**
   - Dedicated navigation tab with SVG compass rose icon.
   - Active caravans monitor with live countdown timers, animated progress bars, and "Waren im Depot entladen" action buttons.
   - Interactive expedition console with destination selector, real-time cargo total calculation, and 250-unit capacity guard.
-  - Foreign regional depots overview with single-click "Depot in Kontor überführen" action.
+  - Foreign regional depots overview with single-click "Rückexpedition entsenden" modal targeting home Kontor.
 - **Synchronized Tutorial & Living Handbook:**
   - Tutorial Step 6 ("6. Die erste Expedition"): Disburses 100.00 Taler & 30.00 Tuch upon dispatching an overseas expedition.
-  - Merchant Handbook (`/handbuch`): Added Section 8 ("Logistik, Übersee-Expeditionen & Regionaldepots") with formulas, capacity limits, and depot mechanics.
+  - Merchant Handbook (`/handbuch`): Section 8 ("Logistik, Übersee-Expeditionen & Regionaldepots") with formulas, capacity limits, and depot mechanics.
 
 ### Phase 10: Dynamic Price Bands, Guild Territory & Kontor Auctions
-- **Database Migration (`009_phase10_auctions.sql`):**
-  - `kontor_auctions`: 7-day cyclical bidding epochs for territorial control over each region with current bid, highest bidder guild, and status.
+- **Database Migration (`009_phase10_auctions.sql` & `011_phase10_integrity.sql`):**
+  - `kontor_auctions`: 7-day cyclical bidding epochs for territorial control over each region with current bid, highest bidder guild, `start_time`, and `end_time`.
   - `regional_controllers`: Tracks active guild sovereignty, winning bid amount, and validity expiration per region.
   - `guild_contributions`: Audit ledger recording user donations into their guild's War Chest treasury.
 - **Dynamic Price Corridor Engine (`app/engine/matching.py`):**
@@ -406,74 +414,46 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
   - `POST /guilds/bank/deposit`: Deducts merchant balance, increments `guild_bank.balance`, and logs contribution record.
   - `POST /guilds/auctions/{id}/bid`: Places alliance bid from guild war chest; enforces minimum bid (100 Taler or current bid + 50 Taler); executes instant atomic refund to previous highest bidder guild.
   - `resolve_kontor_auctions`: Deterministically concludes expired auctions, crowns controlling guild in `regional_controllers` for 7 days, and instantiates next auction epoch.
+  - `ensure_active_auctions`: Idempotently instantiates active 7-day Kontor auctions with `0.0` highest bid for all regions lacking one.
 - **Territorial Privileges & Royal UI Badging:**
   - **Transit Speedup:** 25% duration reduction ($0.75\times$) for caravans travelling to/from controlled territories.
   - **Trade Tax Dividend:** 0.5% regional trade dividend credited to controlling guild's treasury on market sales.
   - Crown badges (`👑 [TAG]`) render next to controlling regions on top nav bar, expedition cards, and Kontor screens.
-- **Synchronized Tutorial & Handbook:**
-  - Tutorial Step 7 ("7. Die Macht der Hanse"): Disburses 200.00 Taler & 40.00 Eisen upon founding or joining an alliance.
-  - Merchant Handbook (`/handbuch`): Section 9 ("Territoriale Kontrolle, Kontor-Auktionen & Kriegskasse") details price band math, auction mechanics, outbid guarantees, and territorial perks.
 
-### Stability & Core Engine Patches (Post-Phase 10 Integrity Patch)
-- **Deterministic Lock Ordering & Deadlock Prevention (`app/engine/matching.py`):**
-  - Eliminated concurrent PostgreSQL transaction deadlocks during simultaneous maker/taker matching and order execution.
-  - User IDs, order IDs, and inventory records are deterministically sorted in strict numerical/lexicographical ascending order (`ORDER BY ... ASC`) before executing `SELECT ... FOR UPDATE` locks.
-  - Corrected schema alignment across `matching.py` by removing erroneous references to a non-existent `id` column on the `inventories` table (keyed by `(user_id, resource_type)`).
-- **Cumulative Warehouse Capacity Enforcement (`app/engine/production.py` & `app/engine/caravans.py`):**
-  - Transformed warehouse storage cap from a per-commodity limit into a global cumulative ceiling: $\sum_{r \in \text{Commodities}} \text{amount}_r \le \text{storage\_cap}_{\text{effective}}$.
-  - In `calculate_offline_production`, if total generation across all commodities exceeds remaining warehouse volume ($\text{storage\_cap} - \sum \text{amount}_{\text{current}}$), surplus intake is distributed proportionally based on building generation rates, excess volume is discarded, and discarded units are tracked under `production_delta[r]["lost"]`.
-  - In `transfer_depot_to_kontor` (`app/engine/caravans.py`), transfer requests that would exceed the cumulative storage capacity are strictly rejected with `ValueError` (`"Nicht genügend Lagerkapazität im Zentrallager vorhanden"`).
-- **Three-Tier Price Corridor Fallback Hierarchy (`app/engine/matching.py`):**
-  - Hardened reference price discovery against zero-liquidity distortion:
-    1. **Tier 1 (24h-VWAP):** Volume-Weighted Average Price over preceding 24 hours if $\text{volume}_{24h} > 0$.
-    2. **Tier 2 (Historical Trade Price):** Most recent trade execution price when 24h volume is zero.
-    3. **Tier 3 (Canonical Base Price):** Configuration baseline price (`REFERENCE_PRICES[r]`) when no trading history exists.
-  - Price corridors remain strictly bounded to $[0.50 \times \text{ReferencePrice}, 2.00 \times \text{ReferencePrice}]$.
-- **Auction Expiration Verification (`app/engine/auctions.py` & `app/routes/guilds.py`):**
-  - Bids placed at or after epoch expiration (`NOW() >= epoch_end_at`) are rejected immediately with `ValueError` ("Auktion ist bereits abgelaufen").
-  - `handle_place_auction_bid` maps expiration errors to HTTP 422 Unprocessable Content.
-  - Automatic on-demand epoch resolution triggers immediately upon detecting an expired auction.
-- **Strict Decimal Numeric Type Casting:**
-  - Resolved `TypeError` incompatibilities between Python `float` and PostgreSQL `Decimal` types across `caravans.py`, `auctions.py`, `production.py`, `guilds.py`, and `matching.py`.
-  - All database inputs and arithmetic conversions cast values to `Decimal(str(round(val, 2)))` or `Decimal(str(round(val, 4)))` prior to execution.
-- **Zero-Yield Building Initialization (`app/engine/production.py` & `app/routes/auth_routes.py`):**
-  - For commodities where the merchant's home region has a `0.0` multiplier (import-only goods), buildings are initialized with `level = 0` and `production_rate = 0.0000` (instead of level 1 with 0 rate), reflecting that non-indigenous extraction infrastructure does not exist in the home settlement.
-
-### Secondary System Integrity & Vulnerability Patches
-- **Regional Depot Storage Caps (`app/engine/caravans.py` & `app/config.py`):**
-  - Enforced `REGIONAL_DEPOT_CAP = 500.0` across foreign depots per player and per region.
-  - In `unload_caravan`, existing depot holdings are queried via row-level locks (`SELECT ... FOR UPDATE`); unloading that breaches the 500-unit cap is aborted with `ValueError` and mapped to HTTP 422 Unprocessable Content (`"Regionaldepot ist voll"`).
-- **Guild Disbandment & Succession Guard (`app/engine/guilds.py`):**
-  - On guild leader departure, leadership priority transfers to the highest-ranking officer (`ORDER BY CASE WHEN role = 'OFFICER' THEN 0 ELSE 1 END ASC, joined_at ASC`).
-  - If the departing leader is the sole remaining member, all dependent foreign key records (`guild_projects`, `guild_bank_inventory`, `guild_bank`, `guild_contributions`, `regional_controllers`, `kontor_auctions`, `guild_members`, `guilds`) are atomically deleted, dissolving the alliance cleanly.
-- **Null-Safe Regional Trade Tax Dividends (`app/engine/matching.py` & `app/engine/auctions.py`):**
-  - Wrapped 0.5% territorial trade dividend execution in active controller existence check (`valid_until > NOW()`, `guild_id IS NOT NULL`).
-  - If the seller's home region is uncontrolled or expired, the trade fee remains burned without raising null reference errors or rolling back valid market matches.
-- **Strict Non-Negative Production Delta Guard (`app/engine/production.py`):**
-  - Implemented floor guard $\Delta t = \max(0.0, (T_{now} - \text{last\_calculated\_at}).\text{total\_seconds}())$ to prevent clock skew or future-dated records from subtracting inventory or yielding negative offline amounts.
-- **Multi-Worker Database-Backed Rate Limiting (`app/rate_limiter.py` & `migrations/010_phase10_rate_limits.sql`):**
-  - Replaced in-memory sliding window with PostgreSQL table `rate_limits` indexed on `(client_key, created_at DESC)`.
-  - Concurrency across worker processes is serialized via transaction-level advisory locks `SELECT pg_advisory_xact_lock(hashtext(key))`.
-  - Includes opportunistic background pruning of expired entries older than 10 minutes.
-- **Atomic Order Cancellation Verification (`app/engine/matching.py` & `app/routes/market.py`):**
-  - Order cancellation locks the target row with `SELECT ... FOR UPDATE` and re-verifies `status == 'ACTIVE'`.
-  - Strictly refunds remaining escrow funds `(amount - filled_amount) * limit_price` (for BUY) or remaining commodities `amount - filled_amount` (for SELL).
-  - Duplicate or race-conditioned cancellation attempts on filled/cancelled orders cleanly abort returning `success = False` with zero balance mutation.
+### Comprehensive Economic & System Integrity Hardening (Phase 10 Integrity Patch)
+- **Price Improvement Escrow Refunds (`app/engine/matching.py`):**
+  - In aggressive order matching where a buyer bids higher than a resting maker's limit price ($P_{\text{limit}} > P_{\text{maker}}$), the difference is immediately and atomically refunded to the buyer's balance, recording `price_improvement_refund` in `trades_executed`.
+- **Wash-Trading Rejection (`app/engine/matching.py` & `app/routes/market.py`):**
+  - Pre-match discovery checks detect whether an incoming order crosses with existing resting orders owned by the same merchant ID. Such orders are rejected with `ValueError` and HTTP 422 (`"Eigenhandel ist an der Börse untersagt"`).
+  - Cross-trader discovery query filters out taker orders with `AND user_id != %s`.
+- **Comprehensive 7-Pillar Net Worth Accounting (`app/engine/ranking.py`):**
+  - Expanded `calculate_user_net_worth` and `compute_full_leaderboard` to cover all 7 asset classes: liquid balance, escrowed Taler in BUY orders, warehouse inventories, escrowed commodities in SELL orders, in-transit & arrived caravan cargo, regional depot stockpiles, and building sunk capital.
+- **Physical Return Expeditions & Prohibited Teleportation (`app/engine/caravans.py`, `app/routes/caravans.py`, `app/templates/components/expeditions.html`):**
+  - Deprecated and removed instant transfer route `POST /caravans/depots/{region_id}/transfer`.
+  - Merchants must dispatch return caravans from foreign depots back to their home Kontor, deducting from depot holdings and subject to physical travel duration.
+  - Arrived return caravans unload directly into Kontor inventories, bounded by warehouse storage capacity.
+- **Automated Rolling Maintenance for Database Rate Limits (`app/rate_limiter.py` & `migrations/011_phase10_integrity.sql`):**
+  - Added composite index on `rate_limits (client_key, created_at DESC)`.
+  - Rolling opportunistic cleanup deletes rate limit records older than 1 hour on limiter checks and provides callable `prune_expired()`.
+- **Idempotent Active Kontor Auction Initialization (`app/engine/auctions.py` & `app/main.py`):**
+  - Created `ensure_active_auctions()` initializing 7-day auctions with `current_highest_bid = 0.0` for any Hanseatic region without an active epoch.
+  - Bound to application lifespan startup hook in `app/main.py` for automated initialization on deployment.
 
 ---
 
 ## 5. Test Suite Metrics
 
 All tests execute cleanly directly against PostgreSQL on the production server:
-- **Total Test Files:** 15
-- **Total Tests:** 68
-- **Pass Rate:** 100% (68 passed in 22.73s)
+- **Total Test Files:** 16
+- **Total Tests:** 74
+- **Pass Rate:** 100% (74 passed in 23.64s)
 
 | Test File | Tests | Coverage Scope |
 | :--- | :--- | :--- |
 | `tests/test_bugfixes.py` | 6 | Deadlock-free matching concurrency, Cumulative warehouse capacity, 3-tier price corridor hierarchy, Auction deadline rejection, Decimal precision casting, Zero-yield building initialization |
 | `tests/test_concurrent_orders.py` | 1 | Concurrent multi-threaded order matching ACID verification |
 | `tests/test_e2e_http.py` | 1 | Full end-to-end HTTP registration, building upgrade, and trade matching |
+| `tests/test_economic_integrity.py` | 6 | Price improvement refunds, Wash-trading guard (HTTP 422), 7-pillar comprehensive net worth valuation, Removal of instant depot teleportation & Return caravan transit/unloading, Automated 1-hour rate limit pruning, Idempotent Kontor auction auto-initialization |
 | `tests/test_market_and_auth.py` | 3 | Password hashes, session tokens, building upgrades, order cancellation |
 | `tests/test_phase3_features.py` | 6 | Offline catch-up, VWAP metrics, order input validation, rate limiter, seeder |
 | `tests/test_phase4_features.py` | 5 | Net worth math, capital conservation, ranking cache, CSRF middleware, PWA assets |

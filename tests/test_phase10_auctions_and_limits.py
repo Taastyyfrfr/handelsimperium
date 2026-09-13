@@ -87,6 +87,8 @@ def test_dynamic_price_band_rejection_and_acceptance(db_conn):
         db_conn.commit()
         assert order["order_id"] is not None
         assert order["status"] in ("ACTIVE", "FILLED")
+        cur.execute("DELETE FROM market_orders WHERE user_id = %s", (uid,))
+        db_conn.commit()
 
     # 4. HTTP Route rejection test (HTTP 422)
     with TestClient(app) as client:

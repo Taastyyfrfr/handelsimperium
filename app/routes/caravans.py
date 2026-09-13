@@ -61,6 +61,7 @@ def get_expeditions_view(
 def handle_dispatch_caravan(
     request: Request,
     destination_region_id: int = Form(...),
+    origin_region_id: Optional[int] = Form(None),
     cargo_wood: float = Form(0.0),
     cargo_stone: float = Form(0.0),
     cargo_iron: float = Form(0.0),
@@ -69,9 +70,9 @@ def handle_dispatch_caravan(
     user: dict = Depends(get_current_user),
 ):
     """
-    Validates cargo capacity and inventory, deducts resources atomically,
+    Validates cargo capacity and inventory / depot balance, deducts resources atomically,
     calculates transit duration and departure/arrival timestamps,
-    and inserts a new EN_ROUTE caravan.
+    and inserts a new EN_ROUTE caravan (outbound or return).
     """
     cargo = {
         "wood": cargo_wood,
@@ -88,7 +89,7 @@ def handle_dispatch_caravan(
         with conn.cursor() as cur:
             try:
                 calculate_offline_production(cur, user["id"])
-                res = dispatch_caravan(cur, user["id"], destination_region_id, cargo)
+                res = dispatch_caravan(cur, user["id"], destination_region_id, cargo, origin_region_id=origin_region_id)
                 conn.commit()
                 message = (
                     f"Karawane #{res['id']} erfolgreich nach [{res['dest_tag']}] {res['dest_name']} entsandt! "
@@ -111,7 +112,7 @@ def handle_unload_caravan(
     user: dict = Depends(get_current_user),
 ):
     """
-    Unloads an arrived caravan into the foreign regional depot.
+    Unloads an arrived caravan into the foreign regional depot or home Kontor warehouse.
     """
     message = None
     error = None
@@ -124,11 +125,12 @@ def handle_unload_caravan(
                 res = unload_caravan(cur, user["id"], caravan_id)
                 conn.commit()
                 cargo_str = ", ".join(f"{v:.0f} {k}" for k, v in res["cargo"].items() if v > 0)
-                message = f"Karawane #{caravan_id} erfolgreich im Depot [{res['dest_tag']}] {res['dest_name']} entladen! ({cargo_str})"
+                message = f"Karawane #{caravan_id} erfolgreich im Kontor/Depot [{res['dest_tag']}] {res['dest_name']} entladen! ({cargo_str})"
             except ValueError as e:
                 conn.rollback()
                 error = str(e)
-                if "regionaldepot ist voll" in error.lower() or "kapazitätsgrenze" in error.lower():
+                err_low = error.lower()
+                if "regionaldepot ist voll" in err_low or "kapazitätsgrenze" in err_low or "zentrallager ist voll" in err_low:
                     status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
             except Exception as e:
                 conn.rollback()
@@ -136,32 +138,3 @@ def handle_unload_caravan(
 
     return render_expeditions_response(request, user["id"], message=message, error=error, status_code=status_code)
 
-
-@router.post("/caravans/depots/{region_id}/transfer", response_class=HTMLResponse)
-def handle_transfer_depot(
-    request: Request,
-    region_id: int,
-    user: dict = Depends(get_current_user),
-):
-    """
-    Transfers stockpiled goods from a foreign regional depot to the player's home Kontor.
-    """
-    message = None
-    error = None
-
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            try:
-                calculate_offline_production(cur, user["id"])
-                res = transfer_depot_to_kontor(cur, user["id"], region_id)
-                conn.commit()
-                goods_str = ", ".join(f"{v:.1f} {k}" for k, v in res["transferred"].items())
-                message = f"Waren aus dem Depot [{res['region_tag']}] erfolgreich in das Kontor überführt: {goods_str}."
-            except ValueError as e:
-                conn.rollback()
-                error = str(e)
-            except Exception as e:
-                conn.rollback()
-                error = f"Fehler beim Transfer: {str(e)}"
-
-    return render_expeditions_response(request, user["id"], message=message, error=error)

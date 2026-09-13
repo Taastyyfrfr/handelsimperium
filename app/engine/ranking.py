@@ -58,15 +58,25 @@ def calculate_user_net_worth(
     inventories: Dict[str, float],
     buildings: Dict[str, int],
     price_map: Dict[str, float],
+    escrow_taler: float = 0.0,
+    escrow_commodities: Optional[Dict[str, float]] = None,
+    transit_commodities: Optional[Dict[str, float]] = None,
+    depot_commodities: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
     """
-    Calculates 3-pillar net worth for an individual merchant:
+    Calculates comprehensive net worth for an individual merchant across all assets:
     1. Liquid Taler balance
-    2. Commodity inventory valuation (using 24h VWAP or reference prices)
-    3. Sunk capital in production buildings & warehouse
+    2. Escrowed Taler in active BUY orders
+    3. Warehouse inventory (valued at 24h-VWAP / reference prices)
+    4. Escrowed commodities in active SELL orders
+    5. In-transit cargo in caravans (EN_ROUTE or ARRIVED)
+    6. Regional depot stockpiles
+    7. Sunk capital in production buildings & warehouse
     """
     liquid = round(float(balance), 2)
+    escrow_bal = round(float(escrow_taler), 2)
     
+    # 1. Warehouse inventory
     commodity_val = 0.0
     inv_breakdown = {}
     for res in SUPPORTED_RESOURCES:
@@ -76,7 +86,49 @@ def calculate_user_net_worth(
         inv_breakdown[res] = {"amount": amt, "price": p, "value": val}
         commodity_val += val
     commodity_val = round(commodity_val, 2)
+
+    # 2. Escrowed commodities (active SELL orders)
+    escrow_comm_map = escrow_commodities or {}
+    escrow_comm_val = 0.0
+    escrow_comm_breakdown = {}
+    for res, amt in escrow_comm_map.items():
+        amt_f = float(amt)
+        if amt_f > 0:
+            p = price_map.get(res, REFERENCE_PRICES.get(res, 1.0))
+            val = round(amt_f * p, 2)
+            escrow_comm_breakdown[res] = {"amount": amt_f, "price": p, "value": val}
+            escrow_comm_val += val
+    escrow_comm_val = round(escrow_comm_val, 2)
+
+    # 3. In-transit / arrived caravan cargo
+    transit_map = transit_commodities or {}
+    transit_val = 0.0
+    transit_breakdown = {}
+    for res, amt in transit_map.items():
+        amt_f = float(amt)
+        if amt_f > 0:
+            p = price_map.get(res, REFERENCE_PRICES.get(res, 1.0))
+            val = round(amt_f * p, 2)
+            transit_breakdown[res] = {"amount": amt_f, "price": p, "value": val}
+            transit_val += val
+    transit_val = round(transit_val, 2)
+
+    # 4. Regional depot stockpiles
+    depot_map = depot_commodities or {}
+    depot_val = 0.0
+    depot_breakdown = {}
+    for res, amt in depot_map.items():
+        amt_f = float(amt)
+        if amt_f > 0:
+            p = price_map.get(res, REFERENCE_PRICES.get(res, 1.0))
+            val = round(amt_f * p, 2)
+            depot_breakdown[res] = {"amount": amt_f, "price": p, "value": val}
+            depot_val += val
+    depot_val = round(depot_val, 2)
     
+    total_commodity_val = round(commodity_val + escrow_comm_val + transit_val + depot_val, 2)
+
+    # 5. Building sunk capital
     building_cap = 0.0
     building_breakdown = {}
     for b_type in BUILDING_CONFIG.keys():
@@ -86,34 +138,45 @@ def calculate_user_net_worth(
         building_cap += cap
     building_cap = round(building_cap, 2)
     
-    total_net_worth = round(liquid + commodity_val + building_cap, 2)
+    total_net_worth = round(liquid + escrow_bal + total_commodity_val + building_cap, 2)
     
     return {
         "user_id": user_id,
         "username": username,
         "liquid_balance": liquid,
+        "escrow_balance": escrow_bal,
+        "escrow_taler": escrow_bal,
         "commodity_value": commodity_val,
+        "escrow_commodity_value": escrow_comm_val,
+        "transit_commodity_value": transit_val,
+        "depot_commodity_value": depot_val,
+        "total_commodity_value": total_commodity_val,
         "building_capital": building_cap,
         "total_net_worth": total_net_worth,
         "inventories": inv_breakdown,
         "buildings": building_breakdown,
+        "escrow_commodities": escrow_comm_breakdown,
+        "transit_commodities": transit_breakdown,
+        "depot_commodities": depot_breakdown,
     }
 
 def compute_full_leaderboard(cur) -> Tuple[List[Dict[str, Any]], Dict[str, float]]:
     """
-    Loads all merchants, their inventories, and buildings from PostgreSQL
+    Loads all merchants, liquid balances, escrowed cash/goods, inventories,
+    caravans, regional depots, and buildings from PostgreSQL
     and computes sorted rankings in an atomic, efficient pass.
     """
+    import json
     price_map = get_commodity_prices(cur)
     
     # 1. Fetch all users
     cur.execute("SELECT id, username, balance FROM users ORDER BY id ASC")
     user_rows = cur.fetchall()
     
-    # 2. Fetch all inventories
+    # 2. Fetch all warehouse inventories
     cur.execute("SELECT user_id, resource_type, amount FROM inventories")
     inv_rows = cur.fetchall()
-    inv_by_user = {}
+    inv_by_user: Dict[int, Dict[str, float]] = {}
     for r in inv_rows:
         u_id = r["user_id"]
         if u_id not in inv_by_user:
@@ -123,14 +186,74 @@ def compute_full_leaderboard(cur) -> Tuple[List[Dict[str, Any]], Dict[str, float
     # 3. Fetch all buildings
     cur.execute("SELECT user_id, building_type, level FROM buildings")
     build_rows = cur.fetchall()
-    build_by_user = {}
+    build_by_user: Dict[int, Dict[str, int]] = {}
     for r in build_rows:
         u_id = r["user_id"]
         if u_id not in build_by_user:
             build_by_user[u_id] = {}
         build_by_user[u_id][r["building_type"]] = int(r["level"])
+
+    # 4. Fetch escrowed Taler from active BUY orders
+    cur.execute(
+        """
+        SELECT user_id, SUM((amount - filled_amount) * limit_price) AS escrow_taler
+        FROM market_orders
+        WHERE status = 'ACTIVE' AND order_type = 'BUY' AND (amount - filled_amount) > 0
+        GROUP BY user_id
+        """
+    )
+    escrow_taler_by_user = {r["user_id"]: float(r["escrow_taler"]) for r in cur.fetchall()}
+
+    # 5. Fetch escrowed commodities from active SELL orders
+    cur.execute(
+        """
+        SELECT user_id, resource_type, SUM(amount - filled_amount) AS escrow_amount
+        FROM market_orders
+        WHERE status = 'ACTIVE' AND order_type = 'SELL' AND (amount - filled_amount) > 0
+        GROUP BY user_id, resource_type
+        """
+    )
+    escrow_comm_by_user: Dict[int, Dict[str, float]] = {}
+    for r in cur.fetchall():
+        u_id = r["user_id"]
+        if u_id not in escrow_comm_by_user:
+            escrow_comm_by_user[u_id] = {}
+        escrow_comm_by_user[u_id][r["resource_type"]] = float(r["escrow_amount"])
+
+    # 6. Fetch in-transit / arrived caravan cargo
+    cur.execute(
+        """
+        SELECT user_id, cargo
+        FROM caravans
+        WHERE status IN ('EN_ROUTE', 'ARRIVED')
+        """
+    )
+    transit_by_user: Dict[int, Dict[str, float]] = {}
+    for r in cur.fetchall():
+        u_id = r["user_id"]
+        if u_id not in transit_by_user:
+            transit_by_user[u_id] = {}
+        cargo_dict = r["cargo"] if isinstance(r["cargo"], dict) else json.loads(r["cargo"])
+        for res, amt in cargo_dict.items():
+            transit_by_user[u_id][res] = transit_by_user[u_id].get(res, 0.0) + float(amt)
+
+    # 7. Fetch foreign regional depot stockpiles
+    cur.execute(
+        """
+        SELECT user_id, resource_type, SUM(amount) AS depot_amount
+        FROM regional_depots
+        WHERE amount > 0
+        GROUP BY user_id, resource_type
+        """
+    )
+    depot_by_user: Dict[int, Dict[str, float]] = {}
+    for r in cur.fetchall():
+        u_id = r["user_id"]
+        if u_id not in depot_by_user:
+            depot_by_user[u_id] = {}
+        depot_by_user[u_id][r["resource_type"]] = float(r["depot_amount"])
         
-    # 4. Compute net worth for all users
+    # 8. Compute comprehensive net worth for all users
     entries = []
     for u in user_rows:
         u_id = u["id"]
@@ -141,13 +264,17 @@ def compute_full_leaderboard(cur) -> Tuple[List[Dict[str, Any]], Dict[str, float
             inventories=inv_by_user.get(u_id, {}),
             buildings=build_by_user.get(u_id, {}),
             price_map=price_map,
+            escrow_taler=escrow_taler_by_user.get(u_id, 0.0),
+            escrow_commodities=escrow_comm_by_user.get(u_id, {}),
+            transit_commodities=transit_by_user.get(u_id, {}),
+            depot_commodities=depot_by_user.get(u_id, {}),
         )
         entries.append(nw)
         
-    # 5. Sort descending by total_net_worth, tie-break by username
+    # 9. Sort descending by total_net_worth, tie-break by username
     entries.sort(key=lambda x: (-x["total_net_worth"], x["username"].lower()))
     
-    # 6. Assign ranks
+    # 10. Assign ranks
     for idx, e in enumerate(entries, start=1):
         e["rank"] = idx
         

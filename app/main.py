@@ -22,7 +22,7 @@ import os
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: initialize connection pool & rate limits table
+    # Startup: initialize connection pool, rate limits table & active auctions
     init_pool()
     try:
         with get_db_connection() as conn:
@@ -34,7 +34,12 @@ async def lifespan(app: FastAPI):
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     );
                     CREATE INDEX IF NOT EXISTS idx_rate_limits_key_time ON rate_limits(client_key, created_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_rate_limits_key_created ON rate_limits(client_key, created_at);
+                    ALTER TABLE kontor_auctions ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ;
+                    UPDATE kontor_auctions SET end_time = epoch_end_at WHERE end_time IS NULL;
                 """)
+                from app.engine.auctions import ensure_active_auctions
+                ensure_active_auctions(cur)
                 conn.commit()
     except Exception:
         pass

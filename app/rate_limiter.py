@@ -68,12 +68,8 @@ class SlidingWindowRateLimiter:
                         (key, now),
                     )
 
-                    # Opportunistic pruning (5% of requests prune entries older than 10 minutes)
-                    if random.random() < 0.05:
-                        cur.execute(
-                            "DELETE FROM rate_limits WHERE created_at < %s",
-                            (now - timedelta(minutes=10),),
-                        )
+                    # Automated rolling maintenance to prevent unbounded table growth
+                    cur.execute("DELETE FROM rate_limits WHERE created_at < NOW() - INTERVAL '1 hour'")
 
                     conn.commit()
                     return True
@@ -81,6 +77,19 @@ class SlidingWindowRateLimiter:
             # Fail-open if rate limiter table is unavailable during bootstrap
             logger.warning("SlidingWindowRateLimiter error: %s", e)
             return True
+
+    def prune_expired(self) -> int:
+        """Explicitly deletes rate limit entries older than 1 hour across all workers."""
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM rate_limits WHERE created_at < NOW() - INTERVAL '1 hour'")
+                    count = cur.rowcount
+                    conn.commit()
+                    return count
+        except Exception as e:
+            logger.warning("Failed to prune expired rate limits: %s", e)
+            return 0
 
     def reset(self):
         """Clears all recorded rate limit history across all workers."""

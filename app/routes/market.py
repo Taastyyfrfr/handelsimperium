@@ -120,6 +120,11 @@ def create_market_order(
                         message = f"Order #{res['order_id']} ({order_type} {res['initial_amount']} {resource_type} @ {limit_price}) erfolgreich im Orderbuch platziert."
                 except ValueError as e:
                     conn.rollback()
+                    if "Eigenhandel ist an der Börse untersagt" in str(e):
+                        raise HTTPException(
+                            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="Eigenhandel ist an der Börse untersagt",
+                        )
                     error = str(e)
             
             # Fetch fresh state for rendering

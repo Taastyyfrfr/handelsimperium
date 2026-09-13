@@ -7,18 +7,44 @@ from app.engine.notifications import create_notification
 from app.engine.guilds import get_user_guild_membership
 
 
-def ensure_kontor_auctions(cur):
-    """Ensures each Hanseatic region has an active 7-day Kontor auction epoch."""
-    cur.execute(
-        """
-        INSERT INTO kontor_auctions (region_id, current_highest_bid, highest_bidder_guild_id, epoch_end_at, status)
-        SELECT id, 0.0, NULL, NOW() + INTERVAL '7 days', 'ACTIVE'
-        FROM regions r
-        WHERE NOT EXISTS (
-            SELECT 1 FROM kontor_auctions ka WHERE ka.region_id = r.id AND ka.status = 'ACTIVE'
+def ensure_active_auctions(db_session=None):
+    """
+    Idempotent Kontor Auction Initialization:
+    Checks all regions in the regions table.
+    If any region lacks an auction record with status 'ACTIVE',
+    inserts an active auction with current_highest_bid = 0.0,
+    epoch_end_at / end_time = NOW() + INTERVAL '7 days', and status 'ACTIVE'.
+    Accepts a database connection, cursor, or None.
+    """
+    def _execute(cur):
+        cur.execute(
+            """
+            INSERT INTO kontor_auctions (region_id, current_highest_bid, highest_bidder_guild_id, epoch_end_at, end_time, status)
+            SELECT id, 0.0, NULL, NOW() + INTERVAL '7 days', NOW() + INTERVAL '7 days', 'ACTIVE'
+            FROM regions r
+            WHERE NOT EXISTS (
+                SELECT 1 FROM kontor_auctions ka WHERE ka.region_id = r.id AND ka.status = 'ACTIVE'
+            )
+            """
         )
-        """
-    )
+
+    if db_session is None:
+        from app.database import get_db_connection
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                _execute(cur)
+                conn.commit()
+    elif hasattr(db_session, "cursor"):
+        # Connection object
+        with db_session.cursor() as cur:
+            _execute(cur)
+    else:
+        # Cursor object
+        _execute(db_session)
+
+
+# Backward-compatibility alias
+ensure_kontor_auctions = ensure_active_auctions
 
 
 def resolve_kontor_auctions(cur) -> int:
@@ -87,8 +113,8 @@ def resolve_kontor_auctions(cur) -> int:
         # 3. Schedule next 7-day cycle
         cur.execute(
             """
-            INSERT INTO kontor_auctions (region_id, current_highest_bid, highest_bidder_guild_id, epoch_end_at, status)
-            VALUES (%s, 0.0, NULL, NOW() + INTERVAL '7 days', 'ACTIVE')
+            INSERT INTO kontor_auctions (region_id, current_highest_bid, highest_bidder_guild_id, epoch_end_at, end_time, status)
+            VALUES (%s, 0.0, NULL, NOW() + INTERVAL '7 days', NOW() + INTERVAL '7 days', 'ACTIVE')
             """,
             (region_id,),
         )

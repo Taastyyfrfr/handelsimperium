@@ -70,10 +70,12 @@ def dispatch_caravan(
     user_id: int,
     destination_region_id: int,
     cargo: Dict[str, float],
+    origin_region_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
-    Dispatches a new caravan expedition from user's home region to destination region.
-    Deducts cargo atomically from user's inventory with row locks.
+    Dispatches a new caravan expedition:
+    - Outbound: from user's home region to a foreign destination (deducts from Kontor warehouse).
+    - Return: from a foreign depot back to user's home region (deducts from regional_depots).
     Validates capacity cap (250 units) and positive amounts.
     """
     # 1. Resolve user's home region
@@ -90,24 +92,47 @@ def dispatch_caravan(
     if not user_row:
         raise ValueError("Benutzer nicht gefunden.")
 
-    origin_region_id = user_row["region_id"]
-    if not origin_region_id or not user_row["coord_x"]:
+    home_region_id = user_row["region_id"]
+    if not home_region_id or not user_row["coord_x"]:
         # Fallback to Danzig if region unset
         cur.execute("SELECT id, name, tag, coord_x, coord_y FROM regions WHERE tag = 'DANZ'")
         danz = cur.fetchone()
-        origin_region_id = danz["id"]
-        cur.execute("UPDATE users SET region_id = %s WHERE id = %s", (origin_region_id, user_id))
-        origin_x, origin_y = danz["coord_x"], danz["coord_y"]
-        origin_tag = danz["tag"]
-        origin_name = danz["name"]
+        home_region_id = danz["id"]
+        cur.execute("UPDATE users SET region_id = %s WHERE id = %s", (home_region_id, user_id))
+        home_x, home_y = danz["coord_x"], danz["coord_y"]
+        home_tag = danz["tag"]
+        home_name = danz["name"]
     else:
-        origin_x, origin_y = user_row["coord_x"], user_row["coord_y"]
-        origin_tag = user_row["tag"]
-        origin_name = user_row["name"]
+        home_x, home_y = user_row["coord_x"], user_row["coord_y"]
+        home_tag = user_row["tag"]
+        home_name = user_row["name"]
 
-    # 2. Validate destination region
+    if origin_region_id is None:
+        origin_region_id = home_region_id
+
+    # 2. Validate route
     if origin_region_id == destination_region_id:
-        raise ValueError("Zielregion muss sich von der Heimatregion unterscheiden.")
+        if origin_region_id == home_region_id:
+            raise ValueError("Zielregion muss sich von der Heimatregion unterscheiden.")
+        raise ValueError("Zielregion muss sich von der Startregion unterscheiden.")
+
+    if origin_region_id == home_region_id:
+        origin_x, origin_y = home_x, home_y
+        origin_tag = home_tag
+        origin_name = home_name
+        is_return = False
+    else:
+        cur.execute(
+            "SELECT id, name, tag, coord_x, coord_y FROM regions WHERE id = %s",
+            (origin_region_id,),
+        )
+        orig_row = cur.fetchone()
+        if not orig_row:
+            raise ValueError("Ungültige Startregion ausgewählt.")
+        origin_x, origin_y = orig_row["coord_x"], orig_row["coord_y"]
+        origin_tag = orig_row["tag"]
+        origin_name = orig_row["name"]
+        is_return = True
 
     cur.execute(
         "SELECT id, name, tag, coord_x, coord_y FROM regions WHERE id = %s",
@@ -143,28 +168,57 @@ def dispatch_caravan(
             f"Ladekapazität überschritten: Eine Karawane kann maximal {CARAVAN_MAX_CARGO:.0f} Güter transportieren (gewählt: {total_cargo:.2f})."
         )
 
-    # 4. Atomic inventory verification & deduction
-    for res, amount in clean_cargo.items():
-        cur.execute(
-            "SELECT amount FROM inventories WHERE user_id = %s AND resource_type = %s FOR UPDATE",
-            (user_id, res),
-        )
-        inv_row = cur.fetchone()
-        current_amount = float(inv_row["amount"]) if inv_row else 0.0
-        if current_amount < amount:
-            raise ValueError(
-                f"Nicht genügend {res} im Kontor vorhanden (benötigt: {amount:.2f}, vorhanden: {current_amount:.2f})."
+    # 4. Atomic inventory / depot verification & deduction
+    if not is_return:
+        for res, amount in clean_cargo.items():
+            cur.execute(
+                "SELECT amount FROM inventories WHERE user_id = %s AND resource_type = %s FOR UPDATE",
+                (user_id, res),
             )
+            inv_row = cur.fetchone()
+            current_amount = float(inv_row["amount"]) if inv_row else 0.0
+            if current_amount < amount:
+                raise ValueError(
+                    f"Nicht genügend {res} im Kontor vorhanden (benötigt: {amount:.2f}, vorhanden: {current_amount:.2f})."
+                )
 
-    for res, amount in clean_cargo.items():
-        cur.execute(
-            """
-            UPDATE inventories
-            SET amount = amount - %s
-            WHERE user_id = %s AND resource_type = %s
-            """,
-            (Decimal(str(round(amount, 2))), user_id, res),
-        )
+        for res, amount in clean_cargo.items():
+            cur.execute(
+                """
+                UPDATE inventories
+                SET amount = amount - %s
+                WHERE user_id = %s AND resource_type = %s
+                """,
+                (Decimal(str(round(amount, 2))), user_id, res),
+            )
+    else:
+        # Return expedition: deduct from regional_depots
+        for res, amount in clean_cargo.items():
+            cur.execute(
+                """
+                SELECT amount FROM regional_depots
+                WHERE user_id = %s AND region_id = %s AND resource_type = %s
+                FOR UPDATE
+                """,
+                (user_id, origin_region_id, res),
+            )
+            depot_row = cur.fetchone()
+            current_amount = float(depot_row["amount"]) if depot_row else 0.0
+            if current_amount < amount:
+                raise ValueError(
+                    f"Nicht genügend {res} im Regionaldepot [{origin_tag}] vorhanden "
+                    f"(benötigt: {amount:.2f}, vorhanden: {current_amount:.2f})."
+                )
+
+        for res, amount in clean_cargo.items():
+            cur.execute(
+                """
+                UPDATE regional_depots
+                SET amount = amount - %s, last_updated_at = NOW()
+                WHERE user_id = %s AND region_id = %s AND resource_type = %s
+                """,
+                (Decimal(str(round(amount, 2))), user_id, origin_region_id, res),
+            )
 
     # 5. Calculate transit duration and arrival timestamp
     distance = calculate_distance(origin_x, origin_y, dest_region["coord_x"], dest_region["coord_y"])
@@ -205,6 +259,7 @@ def dispatch_caravan(
             "cargo": clean_cargo,
             "distance": distance,
             "duration_seconds": duration_seconds,
+            "is_return": is_return,
         },
     )
 
@@ -221,12 +276,15 @@ def dispatch_caravan(
         "departure_at": departure_at,
         "arrival_at": arrival_at,
         "status": new_caravan["status"],
+        "is_return": is_return,
     }
 
 
 def unload_caravan(cur, user_id: int, caravan_id: int) -> Dict[str, Any]:
     """
-    Unloads an ARRIVED caravan into the user's regional depot at destination region.
+    Unloads an ARRIVED caravan:
+    - If arrived at user's home region: credits cargo into Kontor inventories (bounded by warehouse storage cap).
+    - If arrived at a foreign destination: stockpiles cargo in regional_depots (bounded by foreign depot cap).
     Transitions status to UNLOADED.
     """
     # Resolve any pending arrivals first
@@ -234,7 +292,7 @@ def unload_caravan(cur, user_id: int, caravan_id: int) -> Dict[str, Any]:
 
     cur.execute(
         """
-        SELECT c.id, c.user_id, c.destination_region_id, c.cargo, c.status,
+        SELECT c.id, c.user_id, c.origin_region_id, c.destination_region_id, c.cargo, c.status,
                rd.name AS dest_name, rd.tag AS dest_tag
         FROM caravans c
         JOIN regions rd ON rd.id = c.destination_region_id
@@ -257,41 +315,78 @@ def unload_caravan(cur, user_id: int, caravan_id: int) -> Dict[str, Any]:
     dest_region_id = caravan["destination_region_id"]
     cargo_data = caravan["cargo"] if isinstance(caravan["cargo"], dict) else json.loads(caravan["cargo"])
 
-    # Enforce foreign regional depot capacity limit
-    cur.execute(
-        """
-        SELECT resource_type, amount
-        FROM regional_depots
-        WHERE user_id = %s AND region_id = %s
-        FOR UPDATE
-        """,
-        (user_id, dest_region_id),
-    )
-    existing_depot_rows = cur.fetchall()
-    current_depot_total = sum(float(r["amount"]) for r in existing_depot_rows)
-    cargo_total = sum(float(v) for v in cargo_data.values() if float(v) > 0)
-    depot_cap = getattr(settings, "REGIONAL_DEPOT_CAP", 500.0)
+    # Determine user's home region
+    cur.execute("SELECT region_id FROM users WHERE id = %s", (user_id,))
+    u_row = cur.fetchone()
+    home_region_id = u_row["region_id"] if u_row and u_row["region_id"] else 1
 
-    if current_depot_total + cargo_total > depot_cap:
-        raise ValueError(
-            f"Regionaldepot ist voll: Kapazitätsgrenze von {depot_cap:.0f} Einheiten würde überschritten "
-            f"(Aktuell: {current_depot_total:.2f}, Ladung: {cargo_total:.2f})."
+    if dest_region_id == home_region_id:
+        # 1. Unloading at Home Kontor: enforce warehouse cumulative storage capacity
+        cur.execute("SELECT level FROM buildings WHERE user_id = %s AND building_type = 'warehouse'", (user_id,))
+        wh_row = cur.fetchone()
+        wh_level = int(wh_row["level"]) if wh_row else 1
+        storage_cap = get_effective_storage_cap(cur, user_id, wh_level)
+
+        cur.execute(
+            "SELECT resource_type, amount FROM inventories WHERE user_id = %s FOR UPDATE",
+            (user_id,),
         )
+        existing_inv_rows = cur.fetchall()
+        current_inv_total = sum(float(r["amount"]) for r in existing_inv_rows)
+        cargo_total = sum(float(v) for v in cargo_data.values() if float(v) > 0)
 
-    # Stockpile in regional_depots atomically
-    for res, amt in cargo_data.items():
-        if amt > 0:
-            cur.execute(
-                """
-                INSERT INTO regional_depots (user_id, region_id, resource_type, amount, last_updated_at)
-                VALUES (%s, %s, %s, %s, NOW())
-                ON CONFLICT (user_id, region_id, resource_type)
-                DO UPDATE SET
-                    amount = regional_depots.amount + EXCLUDED.amount,
-                    last_updated_at = NOW()
-                """,
-                (user_id, dest_region_id, res, Decimal(str(round(amt, 2)))),
+        if current_inv_total + cargo_total > storage_cap:
+            raise ValueError(
+                f"Zentrallager ist voll: Lagerkapazität von {storage_cap:.0f} Einheiten würde überschritten "
+                f"(Aktuell: {current_inv_total:.2f}, Ladung: {cargo_total:.2f})."
             )
+
+        for res, amt in cargo_data.items():
+            if amt > 0:
+                cur.execute(
+                    """
+                    UPDATE inventories
+                    SET amount = amount + %s
+                    WHERE user_id = %s AND resource_type = %s
+                    """,
+                    (Decimal(str(round(amt, 2))), user_id, res),
+                )
+    else:
+        # 2. Unloading at Foreign Depot: enforce foreign regional depot capacity limit
+        cur.execute(
+            """
+            SELECT resource_type, amount
+            FROM regional_depots
+            WHERE user_id = %s AND region_id = %s
+            FOR UPDATE
+            """,
+            (user_id, dest_region_id),
+        )
+        existing_depot_rows = cur.fetchall()
+        current_depot_total = sum(float(r["amount"]) for r in existing_depot_rows)
+        cargo_total = sum(float(v) for v in cargo_data.values() if float(v) > 0)
+        depot_cap = getattr(settings, "REGIONAL_DEPOT_CAP", 500.0)
+
+        if current_depot_total + cargo_total > depot_cap:
+            raise ValueError(
+                f"Regionaldepot ist voll: Kapazitätsgrenze von {depot_cap:.0f} Einheiten würde überschritten "
+                f"(Aktuell: {current_depot_total:.2f}, Ladung: {cargo_total:.2f})."
+            )
+
+        # Stockpile in regional_depots atomically
+        for res, amt in cargo_data.items():
+            if amt > 0:
+                cur.execute(
+                    """
+                    INSERT INTO regional_depots (user_id, region_id, resource_type, amount, last_updated_at)
+                    VALUES (%s, %s, %s, %s, NOW())
+                    ON CONFLICT (user_id, region_id, resource_type)
+                    DO UPDATE SET
+                        amount = regional_depots.amount + EXCLUDED.amount,
+                        last_updated_at = NOW()
+                    """,
+                    (user_id, dest_region_id, res, Decimal(str(round(amt, 2)))),
+                )
 
     # Mark as UNLOADED
     cur.execute("UPDATE caravans SET status = 'UNLOADED' WHERE id = %s", (caravan_id,))

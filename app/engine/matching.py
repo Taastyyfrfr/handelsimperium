@@ -98,6 +98,38 @@ def place_and_match_order(
             f"Limitpreis liegt außerhalb der zulässigen Handelsspanne ({floor:.2f} - {ceiling:.2f} Taler)."
         )
 
+    # Wash-trading guard: reject orders that would match against resting orders owned by the same user
+    if order_type == "BUY":
+        cur.execute(
+            """
+            SELECT id FROM market_orders
+            WHERE resource_type = %s
+              AND status = 'ACTIVE'
+              AND user_id = %s
+              AND order_type = 'SELL'
+              AND limit_price <= %s
+              AND (amount - filled_amount) > 0
+            LIMIT 1
+            """,
+            (resource_type, user_id, limit_price),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT id FROM market_orders
+            WHERE resource_type = %s
+              AND status = 'ACTIVE'
+              AND user_id = %s
+              AND order_type = 'BUY'
+              AND limit_price >= %s
+              AND (amount - filled_amount) > 0
+            LIMIT 1
+            """,
+            (resource_type, user_id, limit_price),
+        )
+    if cur.fetchone():
+        raise ValueError("Eigenhandel ist an der Börse untersagt")
+
     # 1. Discover potential opposing candidate orders without locks to identify all involved users and orders
     if order_type == "BUY":
         cur.execute(
@@ -264,6 +296,7 @@ def place_and_match_order(
         seller_payout = trade_value - fee
 
         # Refund price improvement to buyer if buyer's limit_price was higher
+        refund = Decimal("0.00")
         if order_type == "BUY":
             price_delta = Decimal(str(round(limit_price - float(exec_price), 2)))
             if price_delta > 0:
@@ -294,11 +327,11 @@ def place_and_match_order(
         )
         trade_rec = cur.fetchone()
 
-        # Regional tax dividend for controlling guild (0.5% of trade value)
+        # Credit regional trade tax dividend (0.5%) to the controlling guild of the seller's region
         try:
-            credit_regional_trade_tax(cur, seller_id, float(trade_value))
+            credit_regional_trade_tax(cur, seller_id, trade_value)
         except Exception:
-            pass  # Fail-safe: trade execution must never fail due to tax dividend error
+            pass
 
         # Update maker order
         new_maker_filled = Decimal(str(round(float(maker["filled_amount"]) + float(trade_qty), 2)))
@@ -318,6 +351,7 @@ def place_and_match_order(
             "amount": float(trade_qty),
             "price": float(exec_price),
             "fee": float(fee),
+            "price_improvement_refund": float(refund),
         })
 
         # Dispatch trade notifications
