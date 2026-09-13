@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 
@@ -97,7 +98,7 @@ def create_guild(cur, user_id: int, name: str, tag: str, description: str = "") 
             f"Unzureichende Taler zur Gründung einer Gilde! Erforderlich: {GUILD_CREATION_FEE:.2f} Taler, Vorhanden: {avail_bal:.2f} Taler."
         )
 
-    cur.execute("UPDATE users SET balance = balance - %s WHERE id = %s", (GUILD_CREATION_FEE, user_id))
+    cur.execute("UPDATE users SET balance = balance - %s WHERE id = %s", (Decimal(str(GUILD_CREATION_FEE)), user_id))
 
     # 4. Insert guild
     cur.execute(
@@ -317,7 +318,7 @@ def contribute_to_project(cur, user_id: int, project_id: int, resource_type: str
             raise ValueError(
                 f"Unzureichende Taler! Erforderlich: {actual_contributed:.2f}, Verfügbar: {user_balance:.2f}"
             )
-        cur.execute("UPDATE users SET balance = balance - %s WHERE id = %s", (actual_contributed, user_id))
+        cur.execute("UPDATE users SET balance = balance - %s WHERE id = %s", (Decimal(str(round(actual_contributed, 2))), user_id))
     else:
         cur.execute(
             "SELECT amount FROM inventories WHERE user_id = %s AND resource_type = %s FOR UPDATE",
@@ -331,7 +332,7 @@ def contribute_to_project(cur, user_id: int, project_id: int, resource_type: str
             )
         cur.execute(
             "UPDATE inventories SET amount = amount - %s WHERE user_id = %s AND resource_type = %s",
-            (actual_contributed, user_id, clean_res),
+            (Decimal(str(round(actual_contributed, 2))), user_id, clean_res),
         )
 
     # 3. Update project progress
@@ -344,7 +345,7 @@ def contribute_to_project(cur, user_id: int, project_id: int, resource_type: str
         INSERT INTO guild_contributions (guild_id, user_id, contribution_type, resource_type, amount)
         VALUES (%s, %s, 'MONUMENT_PROJECT', %s, %s)
         """,
-        (guild_id, user_id, clean_res, actual_contributed),
+        (guild_id, user_id, clean_res, Decimal(str(round(actual_contributed, 2)))),
     )
 
     # Check overall completion

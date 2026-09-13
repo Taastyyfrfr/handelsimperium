@@ -20,6 +20,10 @@ def test_offline_production_delta(db_conn):
         user_id = cur.fetchone()["id"]
         ensure_user_entities(cur, user_id)
 
+        # Clear other inventories and rates to isolate wood under cumulative warehouse cap
+        cur.execute("UPDATE inventories SET amount = 0.00 WHERE user_id = %s AND resource_type != 'wood'", (user_id,))
+        cur.execute("UPDATE buildings SET production_rate = 0.00 WHERE user_id = %s AND building_type != 'lumberjack'", (user_id,))
+
         # Set initial amount to 50 and last_calculated_at to 2 hours ago
         two_hours_ago = datetime.now(timezone.utc) - timedelta(hours=2)
         cur.execute(
@@ -49,6 +53,8 @@ def test_storage_cap_enforcement(db_conn):
         )
         user_id = cur.fetchone()["id"]
         ensure_user_entities(cur, user_id)
+        cur.execute("UPDATE inventories SET amount = 0.00 WHERE user_id = %s AND resource_type != 'wood'", (user_id,))
+        cur.execute("UPDATE buildings SET production_rate = 0.00 WHERE user_id = %s AND building_type != 'lumberjack'", (user_id,))
 
         # Simulate 30 days offline
         thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)

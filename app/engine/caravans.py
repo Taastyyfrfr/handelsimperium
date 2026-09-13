@@ -1,5 +1,6 @@
 import math
 import json
+from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Any, Optional
 
@@ -161,7 +162,7 @@ def dispatch_caravan(
             SET amount = amount - %s
             WHERE user_id = %s AND resource_type = %s
             """,
-            (amount, user_id, res),
+            (Decimal(str(round(amount, 2))), user_id, res),
         )
 
     # 5. Calculate transit duration and arrival timestamp
@@ -267,7 +268,7 @@ def unload_caravan(cur, user_id: int, caravan_id: int) -> Dict[str, Any]:
                     amount = regional_depots.amount + EXCLUDED.amount,
                     last_updated_at = NOW()
                 """,
-                (user_id, dest_region_id, res, amt),
+                (user_id, dest_region_id, res, Decimal(str(round(amt, 2)))),
             )
 
     # Mark as UNLOADED
@@ -343,15 +344,11 @@ def transfer_depot_to_kontor(
         res = d_row["resource_type"]
         d_amt = float(d_row["amount"])
 
-        # Check current warehouse stock
-        cur.execute(
-            "SELECT amount FROM inventories WHERE user_id = %s AND resource_type = %s FOR UPDATE",
-            (user_id, res),
-        )
-        inv_row = cur.fetchone()
-        current_kontor_amt = float(inv_row["amount"]) if inv_row else 0.0
+        # Check current cumulative warehouse stock
+        cur.execute("SELECT COALESCE(SUM(amount), 0) AS total_kontor FROM inventories WHERE user_id = %s", (user_id,))
+        total_stored = float(cur.fetchone()["total_kontor"])
 
-        space_left = max(0.0, storage_cap - current_kontor_amt)
+        space_left = max(0.0, storage_cap - total_stored)
         amt_to_move = min(d_amt, space_left)
 
         if amt_to_move > 0:
@@ -362,7 +359,7 @@ def transfer_depot_to_kontor(
                 SET amount = amount + %s
                 WHERE user_id = %s AND resource_type = %s
                 """,
-                (amt_to_move, user_id, res),
+                (Decimal(str(round(amt_to_move, 2))), user_id, res),
             )
             # Deduct from depot
             cur.execute(
@@ -371,7 +368,7 @@ def transfer_depot_to_kontor(
                 SET amount = amount - %s, last_updated_at = NOW()
                 WHERE id = %s
                 """,
-                (amt_to_move, d_row["id"]),
+                (Decimal(str(round(amt_to_move, 2))), d_row["id"]),
             )
             transferred[res] = amt_to_move
             total_transferred += amt_to_move

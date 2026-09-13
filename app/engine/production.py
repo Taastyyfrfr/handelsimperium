@@ -25,17 +25,23 @@ def ensure_user_entities(cur, user_id: int):
         b_res = b_info.get("resource")
         if b_res:
             reg_mult = float(multipliers.get(b_res, 1.0))
-            init_rate = round(b_info["base_rate"] * reg_mult, 4) if reg_mult > 0.0 else 0.0
+            if reg_mult <= 0.0:
+                init_level = 0
+                init_rate = 0.0
+            else:
+                init_level = 1
+                init_rate = round(b_info["base_rate"] * reg_mult, 4)
         else:
+            init_level = 1
             init_rate = 0.0
 
         cur.execute(
             """
             INSERT INTO buildings (user_id, building_type, level, production_rate)
-            VALUES (%s, %s, 1, %s)
+            VALUES (%s, %s, %s, %s)
             ON CONFLICT (user_id, building_type) DO NOTHING
             """,
-            (user_id, b_type, init_rate),
+            (user_id, b_type, init_level, init_rate),
         )
     for res in SUPPORTED_RESOURCES:
         starter_amt = STARTER_CONFIG["inventories"].get(res, 0.0)
@@ -164,6 +170,11 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
     # Map resource to its producing building
     res_to_building = {info["resource"]: b_type for b_type, info in BUILDING_CONFIG.items() if info["resource"]}
     
+    current_amounts = {}
+    nominal_generated = {}
+    rates = {}
+    delta_seconds_map = {}
+
     for res in SUPPORTED_RESOURCES:
         inv = inv_rows.get(res)
         if not inv:
@@ -172,7 +183,8 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
         b_type = res_to_building.get(res)
         b_info = building_rows.get(b_type) if b_type else None
         
-        rate = float(b_info["production_rate"]) if b_info else 0.1
+        rate = float(b_info["production_rate"]) if b_info else 0.0
+        rates[res] = rate
         
         last_calc = inv["last_calculated_at"]
         if last_calc.tzinfo is None:
@@ -184,24 +196,85 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
         delta_seconds = max(0.0, (now - last_calc).total_seconds())
         if delta_seconds > max_delta_seconds:
             max_delta_seconds = delta_seconds
+        delta_seconds_map[res] = delta_seconds
             
         generated = delta_seconds * rate
-        current_amount = float(inv["amount"])
-        uncapped_amount = current_amount + generated
-        new_amount = min(storage_cap, uncapped_amount)
-        lost_due_to_cap = max(0.0, uncapped_amount - storage_cap)
-        net_added = new_amount - current_amount
+        nominal_generated[res] = generated
+        current_amounts[res] = float(inv["amount"])
+
+    # Cumulative storage cap check across all commodities: sum(amounts) <= storage_cap
+    current_total_stored = sum(current_amounts.values())
+    total_nominal_generated = sum(nominal_generated.values())
+    remaining_capacity = max(0.0, storage_cap - current_total_stored)
+
+    net_added = {}
+    lost_due_to_cap = {}
+    final_amounts = {}
+
+    if total_nominal_generated <= remaining_capacity:
+        for res in SUPPORTED_RESOURCES:
+            if res not in current_amounts:
+                continue
+            gen = nominal_generated[res]
+            net_added[res] = gen
+            lost_due_to_cap[res] = 0.0
+            final_amounts[res] = round(current_amounts[res] + gen, 2)
+    else:
+        # Distribute available remaining capacity proportionally based on generation rates
+        allocated_so_far = 0.0
+        active_generating = [r for r in SUPPORTED_RESOURCES if r in current_amounts and nominal_generated.get(r, 0.0) > 0]
         
-        # Record delta details for catch-up summary
+        for idx, res in enumerate(active_generating):
+            gen = nominal_generated[res]
+            if remaining_capacity <= 0:
+                add_amt = 0.0
+            elif idx == len(active_generating) - 1:
+                # Last active resource receives remainder to avoid fractional discrepancy
+                add_amt = max(0.0, round(remaining_capacity - allocated_so_far, 2))
+            else:
+                share = gen / total_nominal_generated if total_nominal_generated > 0 else 0.0
+                add_amt = round(remaining_capacity * share, 2)
+                if allocated_so_far + add_amt > remaining_capacity:
+                    add_amt = max(0.0, round(remaining_capacity - allocated_so_far, 2))
+                allocated_so_far += add_amt
+
+            net_added[res] = add_amt
+            lost_due_to_cap[res] = max(0.0, round(gen - add_amt, 2))
+            final_amounts[res] = round(current_amounts[res] + add_amt, 2)
+
+        for res in SUPPORTED_RESOURCES:
+            if res in current_amounts and res not in active_generating:
+                net_added[res] = 0.0
+                lost_due_to_cap[res] = 0.0
+                final_amounts[res] = current_amounts[res]
+
+    for res in SUPPORTED_RESOURCES:
+        if res in final_amounts and final_amounts[res] > storage_cap:
+            over = round(final_amounts[res] - storage_cap, 2)
+            lost_due_to_cap[res] = round(lost_due_to_cap.get(res, 0.0) + over, 2)
+            net_added[res] = max(0.0, round(net_added.get(res, 0.0) - over, 2))
+            final_amounts[res] = float(storage_cap)
+
+    for res in SUPPORTED_RESOURCES:
+        if res not in current_amounts:
+            continue
+        cur_amt = current_amounts[res]
+        gen = nominal_generated[res]
+        lost = lost_due_to_cap[res]
+        added = net_added[res]
+        fin_amt = final_amounts[res]
+        rate = rates[res]
+        delta_sec = delta_seconds_map[res]
+
         production_delta_map[res] = {
-            "produced": round(generated, 2),
-            "lost": round(lost_due_to_cap, 2),
-            "net_added": round(net_added, 2),
-            "final_amount": round(new_amount, 2),
+            "produced": round(gen, 2),
+            "lost": round(lost, 2),
+            "net_added": round(added, 2),
+            "final_amount": round(fin_amt, 2),
             "storage_cap": storage_cap,
             "rate_per_minute": round(rate * 60, 2),
         }
-        
+
         # Write back updated amount and new timestamp
         cur.execute(
             """
@@ -209,17 +282,17 @@ def calculate_offline_production(cur, user_id: int, record_catchup: bool = True)
             SET amount = %s, last_calculated_at = %s
             WHERE user_id = %s AND resource_type = %s
             """,
-            (round(new_amount, 2), now, user_id, res),
+            (Decimal(str(round(fin_amt, 2))), now, user_id, res),
         )
-        
+
         updated_inventories.append({
             "resource_type": res,
-            "amount": round(new_amount, 2),
+            "amount": round(fin_amt, 2),
             "storage_cap": storage_cap,
             "production_rate": rate,
-            "delta_seconds": round(delta_seconds, 1),
-            "generated": round(generated, 2),
-            "lost": round(lost_due_to_cap, 2),
+            "delta_seconds": round(delta_sec, 1),
+            "generated": round(gen, 2),
+            "lost": round(lost, 2),
             "last_calculated_at": now,
         })
 
@@ -467,11 +540,11 @@ def upgrade_building(cur, user_id: int, building_id_or_type: Union[int, str]) ->
     
     # 6. Deduct costs atomically
     if "balance" in required_costs:
-        new_balance = round(current_balance - required_costs["balance"], 2)
+        new_balance = Decimal(str(round(current_balance - required_costs["balance"], 2)))
         cur.execute("UPDATE users SET balance = %s WHERE id = %s", (new_balance, user_id))
         
     for res_name in res_keys:
-        deduct_amt = required_costs[res_name]
+        deduct_amt = Decimal(str(required_costs[res_name]))
         cur.execute(
             "UPDATE inventories SET amount = amount - %s WHERE user_id = %s AND resource_type = %s",
             (deduct_amt, user_id, res_name),
@@ -480,11 +553,11 @@ def upgrade_building(cur, user_id: int, building_id_or_type: Union[int, str]) ->
     # 7. Increment level and recalculate production rate / warehouse capacity
     new_level = current_level + 1
     if b_type == "warehouse":
-        new_rate = 0.0
+        new_rate = Decimal("0.0000")
         new_cap = get_effective_storage_cap(cur, user_id, new_level)
     else:
         base_rate = BUILDING_CONFIG[b_type]["base_rate"]
-        new_rate = round(base_rate * (1.25 ** (new_level - 1)) * region_mult, 4) if region_mult > 0.0 else 0.0
+        new_rate = Decimal(str(round(base_rate * (1.25 ** (new_level - 1)) * region_mult, 4))) if region_mult > 0.0 else Decimal("0.0000")
         new_cap = None
         
     cur.execute(
@@ -502,8 +575,8 @@ def upgrade_building(cur, user_id: int, building_id_or_type: Union[int, str]) ->
         "building_type": b_type,
         "name": BUILDING_CONFIG[b_type]["name"],
         "new_level": new_level,
-        "new_rate": new_rate,
+        "new_rate": float(new_rate),
         "new_storage_cap": new_cap,
-        "new_balance": new_balance if "balance" in required_costs else current_balance,
+        "new_balance": float(new_balance) if "balance" in required_costs else current_balance,
         "costs_deducted": required_costs,
     }

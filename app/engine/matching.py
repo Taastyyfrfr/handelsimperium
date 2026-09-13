@@ -9,10 +9,13 @@ from app.engine.auctions import credit_regional_trade_tax
 
 def get_price_corridor(cur, resource_type: str) -> Tuple[float, float, float]:
     """
-    Computes dynamic price corridor (volatility circuit breaker):
+    Computes dynamic price corridor (volatility circuit breaker) with 3-tier fallback hierarchy:
+    1. 24-Hour VWAP (if 24-hour trade volume > 0)
+    2. Price of most recently executed trade for this commodity
+    3. Canonical base price from REFERENCE_PRICES (only if no trade ever occurred)
+
     Price Floor = round(0.50 * ReferencePrice, 2)
     Price Ceiling = round(2.00 * ReferencePrice, 2)
-    where ReferencePrice is 24h-VWAP (fallback to canonical REFERENCE_PRICES if 24h volume is 0).
     Returns (floor, ceiling, reference_price).
     """
     cur.execute(
@@ -32,7 +35,23 @@ def get_price_corridor(cur, resource_type: str) -> Tuple[float, float, float]:
     if vol_val > 0 and vwap_val > 0:
         ref_price = round(vwap_val, 2)
     else:
-        ref_price = REFERENCE_PRICES.get(resource_type, 5.00)
+        # Tier 2: Last executed trade for this resource
+        cur.execute(
+            """
+            SELECT price
+            FROM trades
+            WHERE resource_type = %s
+            ORDER BY executed_at DESC, id DESC
+            LIMIT 1
+            """,
+            (resource_type,),
+        )
+        last_trade = cur.fetchone()
+        if last_trade and last_trade["price"] is not None:
+            ref_price = round(float(last_trade["price"]), 2)
+        else:
+            # Tier 3: Hardcoded canonical base price
+            ref_price = REFERENCE_PRICES.get(resource_type, 5.00)
 
     floor = round(0.50 * ref_price, 2)
     ceiling = round(2.00 * ref_price, 2)
@@ -48,8 +67,10 @@ def place_and_match_order(
     limit_price: float,
 ) -> Dict[str, Any]:
     """
-    Atomically places a limit order and executes matches using SELECT ... FOR UPDATE.
-    Deducts a 2% market fee on executed trades.
+    Atomically places a limit order and executes matches using deterministic lock ordering.
+    Prevents PostgreSQL deadlocks by acquiring locks on users, orders, and inventories
+    in strictly ascending numerical order.
+    Deducts market fee (2.0% standard, 1.5% with Freihafen) on executed trades.
     Enforces dynamic price corridor [0.50 * VWAP, 2.00 * VWAP].
     """
     order_type = order_type.upper()
@@ -77,60 +98,11 @@ def place_and_match_order(
             f"Limitpreis liegt außerhalb der zulässigen Handelsspanne ({floor:.2f} - {ceiling:.2f} Taler)."
         )
 
-
-    # Always ensure user has fresh production calculated before placing order
-    calculate_offline_production(cur, user_id)
-
-    # 1. Escrow / Lock user funds or goods
+    # 1. Discover potential opposing candidate orders without locks to identify all involved users and orders
     if order_type == "BUY":
-        total_cost = round(amount * limit_price, 2)
-        cur.execute("SELECT balance FROM users WHERE id = %s FOR UPDATE", (user_id,))
-        user_row = cur.fetchone()
-        if not user_row or float(user_row["balance"]) < total_cost:
-            raise ValueError(
-                f"Unzureichendes Guthaben! Erforderlich: {total_cost:.2f} Taler, Vorhanden: {float(user_row['balance'] if user_row else 0):.2f} Taler."
-            )
-        # Deduct escrow from buyer
-        cur.execute("UPDATE users SET balance = balance - %s WHERE id = %s", (total_cost, user_id))
-
-    else:  # SELL
-        cur.execute(
-            "SELECT amount FROM inventories WHERE user_id = %s AND resource_type = %s FOR UPDATE",
-            (user_id, resource_type),
-        )
-        inv_row = cur.fetchone()
-        if not inv_row or float(inv_row["amount"]) < amount:
-            raise ValueError(
-                f"Nicht genügend {resource_type}! Erforderlich: {amount:.2f}, Vorhanden: {float(inv_row['amount'] if inv_row else 0):.2f}."
-            )
-        # Deduct escrow goods from seller
-        cur.execute(
-            "UPDATE inventories SET amount = amount - %s WHERE user_id = %s AND resource_type = %s",
-            (amount, user_id, resource_type),
-        )
-
-    # 2. Insert new market order
-    cur.execute(
-        """
-        INSERT INTO market_orders (user_id, order_type, resource_type, amount, filled_amount, limit_price, status)
-        VALUES (%s, %s, %s, %s, 0.00, %s, 'ACTIVE')
-        RETURNING id, created_at
-        """,
-        (user_id, order_type, resource_type, amount, limit_price),
-    )
-    new_order = cur.fetchone()
-    new_order_id = new_order["id"]
-
-    # 3. Match against opposing active orders with FOR UPDATE lock
-    remaining_amount = amount
-    filled_amount = 0.0
-    trades_executed = []
-
-    if order_type == "BUY":
-        # Match against SELL orders: lowest price first, then oldest
         cur.execute(
             """
-            SELECT id, user_id, amount, filled_amount, limit_price
+            SELECT id, user_id, amount, filled_amount, limit_price, created_at
             FROM market_orders
             WHERE resource_type = %s
               AND status = 'ACTIVE'
@@ -138,123 +110,13 @@ def place_and_match_order(
               AND limit_price <= %s
               AND user_id != %s
             ORDER BY limit_price ASC, created_at ASC
-            FOR UPDATE
             """,
             (resource_type, limit_price, user_id),
         )
-        opposing_orders = cur.fetchall()
-
-        for maker in opposing_orders:
-            if remaining_amount <= 0:
-                break
-
-            maker_id = maker["id"]
-            seller_id = maker["user_id"]
-            maker_unfilled = float(maker["amount"]) - float(maker["filled_amount"])
-            trade_qty = min(remaining_amount, maker_unfilled)
-            if trade_qty <= 0:
-                continue
-
-            exec_price = float(maker["limit_price"])
-            trade_value = round(trade_qty * exec_price, 2)
-            seller_fee_rate = 0.015 if has_guild_perk(cur, seller_id, "FREIHAFEN") else settings.MARKET_FEE_RATE
-            fee = round(trade_value * seller_fee_rate, 2)
-            seller_payout = round(trade_value - fee, 2)
-
-            # Refund price improvement to buyer if buyer's limit_price was higher
-            price_delta = limit_price - exec_price
-            if price_delta > 0:
-                refund = round(trade_qty * price_delta, 2)
-                cur.execute("UPDATE users SET balance = balance + %s WHERE id = %s", (refund, user_id))
-
-            # Prevent deadlocks by locking involved accounts in deterministic order (user_id ASC)
-            first_user, second_user = sorted([user_id, seller_id])
-            cur.execute("SELECT id FROM users WHERE id IN (%s, %s) ORDER BY id FOR UPDATE", (first_user, second_user))
-
-            # Credit seller balance with net payout
-            cur.execute("UPDATE users SET balance = balance + %s WHERE id = %s", (seller_payout, seller_id))
-
-            # Deliver resources to buyer
-            cur.execute(
-                """
-                UPDATE inventories
-                SET amount = amount + %s
-                WHERE user_id = %s AND resource_type = %s
-                """,
-                (trade_qty, user_id, resource_type),
-            )
-
-            # Record trade in trades table
-            cur.execute(
-                """
-                INSERT INTO trades (buyer_id, seller_id, resource_type, amount, price, fee)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                RETURNING id, executed_at
-                """,
-                (user_id, seller_id, resource_type, trade_qty, exec_price, fee),
-            )
-            trade_rec = cur.fetchone()
-
-            # Regional tax dividend for controlling guild (0.5% of trade value)
-            credit_regional_trade_tax(cur, seller_id, trade_value)
-
-            # Update maker order
-            new_maker_filled = round(float(maker["filled_amount"]) + trade_qty, 2)
-            maker_status = "FILLED" if new_maker_filled >= float(maker["amount"]) else "ACTIVE"
-            cur.execute(
-                "UPDATE market_orders SET filled_amount = %s, status = %s WHERE id = %s",
-                (new_maker_filled, maker_status, maker_id),
-            )
-
-            remaining_amount = round(remaining_amount - trade_qty, 2)
-            filled_amount = round(filled_amount + trade_qty, 2)
-
-            trades_executed.append({
-                "trade_id": trade_rec["id"],
-                "seller_id": seller_id,
-                "amount": trade_qty,
-                "price": exec_price,
-                "fee": fee,
-            })
-
-            # Dispatch trade notifications
-            create_notification(
-                cur,
-                user_id=user_id,
-                event_type="TRADE_EXECUTED",
-                payload={
-                    "role": "BUYER",
-                    "trade_id": trade_rec["id"],
-                    "resource_type": resource_type,
-                    "amount": trade_qty,
-                    "price": exec_price,
-                    "total_value": trade_value,
-                    "fee": 0.0,
-                    "counterparty_id": seller_id,
-                },
-            )
-            create_notification(
-                cur,
-                user_id=seller_id,
-                event_type="TRADE_EXECUTED",
-                payload={
-                    "role": "SELLER",
-                    "trade_id": trade_rec["id"],
-                    "resource_type": resource_type,
-                    "amount": trade_qty,
-                    "price": exec_price,
-                    "total_value": trade_value,
-                    "payout": seller_payout,
-                    "fee": fee,
-                    "counterparty_id": user_id,
-                },
-            )
-
-    else:  # SELL order matching against BUY orders
-        # Match against BUY orders: highest price first, then oldest
+    else:  # SELL
         cur.execute(
             """
-            SELECT id, user_id, amount, filled_amount, limit_price
+            SELECT id, user_id, amount, filled_amount, limit_price, created_at
             FROM market_orders
             WHERE resource_type = %s
               AND status = 'ACTIVE'
@@ -262,114 +124,234 @@ def place_and_match_order(
               AND limit_price >= %s
               AND user_id != %s
             ORDER BY limit_price DESC, created_at ASC
-            FOR UPDATE
             """,
             (resource_type, limit_price, user_id),
         )
-        opposing_orders = cur.fetchall()
+    candidates = cur.fetchall()
 
-        for maker in opposing_orders:
-            if remaining_amount <= 0:
-                break
+    # 2. Collect and sort all involved user IDs and order IDs in strictly ascending numerical order
+    all_user_ids = sorted(list(set([user_id] + [c["user_id"] for c in candidates])))
+    all_order_ids = sorted([c["id"] for c in candidates])
 
-            maker_id = maker["id"]
+    # 3. Lock all involved user rows in deterministic numerical order (id ASC)
+    cur.execute(
+        """
+        SELECT id, balance
+        FROM users
+        WHERE id = ANY(%s)
+        ORDER BY id ASC
+        FOR UPDATE
+        """,
+        (all_user_ids,),
+    )
+    locked_users = {u["id"]: u for u in cur.fetchall()}
+
+    # 4. Lock candidate market orders in deterministic numerical order (id ASC)
+    locked_orders = {}
+    if all_order_ids:
+        cur.execute(
+            """
+            SELECT id, user_id, order_type, resource_type, amount, filled_amount, limit_price, status, created_at
+            FROM market_orders
+            WHERE id = ANY(%s)
+            ORDER BY id ASC
+            FOR UPDATE
+            """,
+            (all_order_ids,),
+        )
+        locked_orders = {o["id"]: o for o in cur.fetchall()}
+
+    # 5. Lock inventories for all involved users in deterministic order (user_id ASC)
+    cur.execute(
+        """
+        SELECT user_id, resource_type, amount
+        FROM inventories
+        WHERE user_id = ANY(%s) AND resource_type = %s
+        ORDER BY user_id ASC
+        FOR UPDATE
+        """,
+        (all_user_ids, resource_type),
+    )
+    locked_invs = {inv["user_id"]: inv for inv in cur.fetchall()}
+
+    # 6. Ensure taker user has fresh offline production calculated
+    calculate_offline_production(cur, user_id)
+
+    # 7. Escrow funds / goods from taker
+    if order_type == "BUY":
+        total_cost = Decimal(str(round(amount * limit_price, 2)))
+        cur.execute("SELECT balance FROM users WHERE id = %s", (user_id,))
+        user_bal_row = cur.fetchone()
+        user_bal = Decimal(str(user_bal_row["balance"])) if user_bal_row else Decimal("0.00")
+        if user_bal < total_cost:
+            raise ValueError(
+                f"Unzureichendes Guthaben! Erforderlich: {float(total_cost):.2f} Taler, Vorhanden: {float(user_bal):.2f} Taler."
+            )
+        cur.execute("UPDATE users SET balance = balance - %s WHERE id = %s", (total_cost, user_id))
+    else:  # SELL
+        cur.execute(
+            "SELECT amount FROM inventories WHERE user_id = %s AND resource_type = %s",
+            (user_id, resource_type),
+        )
+        inv_row = cur.fetchone()
+        user_inv_amt = Decimal(str(inv_row["amount"])) if inv_row else Decimal("0.00")
+        if user_inv_amt < Decimal(str(amount)):
+            raise ValueError(
+                f"Nicht genügend {resource_type}! Erforderlich: {amount:.2f}, Vorhanden: {float(user_inv_amt):.2f}."
+            )
+        cur.execute(
+            "UPDATE inventories SET amount = amount - %s WHERE user_id = %s AND resource_type = %s",
+            (Decimal(str(amount)), user_id, resource_type),
+        )
+
+    # 8. Insert new market order
+    cur.execute(
+        """
+        INSERT INTO market_orders (user_id, order_type, resource_type, amount, filled_amount, limit_price, status)
+        VALUES (%s, %s, %s, %s, 0.00, %s, 'ACTIVE')
+        RETURNING id, created_at
+        """,
+        (user_id, order_type, resource_type, Decimal(str(amount)), Decimal(str(limit_price))),
+    )
+    new_order = cur.fetchone()
+    new_order_id = new_order["id"]
+
+    # 9. Filter and sort active opposing orders according to market priority rules
+    valid_opposing = []
+    for cand in candidates:
+        cid = cand["id"]
+        live = locked_orders.get(cid)
+        if live and live["status"] == "ACTIVE":
+            unfilled = Decimal(str(live["amount"])) - Decimal(str(live["filled_amount"]))
+            if unfilled > 0:
+                valid_opposing.append(live)
+
+    # Priority sort:
+    # BUY matches lowest SELL price first, then oldest
+    # SELL matches highest BUY price first, then oldest
+    if order_type == "BUY":
+        valid_opposing.sort(key=lambda o: (float(o["limit_price"]), o["created_at"]))
+    else:
+        valid_opposing.sort(key=lambda o: (-float(o["limit_price"]), o["created_at"]))
+
+    # 10. Execute matching iterations
+    remaining_amount = Decimal(str(amount))
+    filled_amount = Decimal("0.00")
+    trades_executed = []
+
+    for maker in valid_opposing:
+        if remaining_amount <= 0:
+            break
+
+        maker_id = maker["id"]
+        maker_unfilled = Decimal(str(maker["amount"])) - Decimal(str(maker["filled_amount"]))
+        trade_qty = min(remaining_amount, maker_unfilled)
+        if trade_qty <= 0:
+            continue
+
+        exec_price = Decimal(str(round(float(maker["limit_price"]), 2)))
+        trade_value = Decimal(str(round(float(trade_qty * exec_price), 2)))
+
+        if order_type == "BUY":
+            buyer_id = user_id
+            seller_id = maker["user_id"]
+        else:
             buyer_id = maker["user_id"]
-            maker_unfilled = float(maker["amount"]) - float(maker["filled_amount"])
-            trade_qty = min(remaining_amount, maker_unfilled)
-            if trade_qty <= 0:
-                continue
+            seller_id = user_id
 
-            exec_price = float(maker["limit_price"])  # Maker price
-            trade_value = round(trade_qty * exec_price, 2)
-            seller_fee_rate = 0.015 if has_guild_perk(cur, user_id, "FREIHAFEN") else settings.MARKET_FEE_RATE
-            fee = round(trade_value * seller_fee_rate, 2)
-            seller_payout = round(trade_value - fee, 2)
+        seller_fee_rate = Decimal("0.015") if has_guild_perk(cur, seller_id, "FREIHAFEN") else Decimal(str(settings.MARKET_FEE_RATE))
+        fee = Decimal(str(round(float(trade_value * seller_fee_rate), 2)))
+        seller_payout = trade_value - fee
 
-            # Prevent deadlocks by locking involved accounts in deterministic order (user_id ASC)
-            first_user, second_user = sorted([user_id, buyer_id])
-            cur.execute("SELECT id FROM users WHERE id IN (%s, %s) ORDER BY id FOR UPDATE", (first_user, second_user))
+        # Refund price improvement to buyer if buyer's limit_price was higher
+        if order_type == "BUY":
+            price_delta = Decimal(str(round(limit_price - float(exec_price), 2)))
+            if price_delta > 0:
+                refund = Decimal(str(round(float(trade_qty * price_delta), 2)))
+                cur.execute("UPDATE users SET balance = balance + %s WHERE id = %s", (refund, buyer_id))
 
-            # Credit seller balance with net payout
-            cur.execute("UPDATE users SET balance = balance + %s WHERE id = %s", (seller_payout, user_id))
+        # Credit seller balance with net payout
+        cur.execute("UPDATE users SET balance = balance + %s WHERE id = %s", (seller_payout, seller_id))
 
-            # Deliver resources to buyer
-            cur.execute(
-                """
-                UPDATE inventories
-                SET amount = amount + %s
-                WHERE user_id = %s AND resource_type = %s
-                """,
-                (trade_qty, buyer_id, resource_type),
-            )
+        # Deliver resources to buyer
+        cur.execute(
+            """
+            UPDATE inventories
+            SET amount = amount + %s
+            WHERE user_id = %s AND resource_type = %s
+            """,
+            (trade_qty, buyer_id, resource_type),
+        )
 
-            # Record trade
-            cur.execute(
-                """
-                INSERT INTO trades (buyer_id, seller_id, resource_type, amount, price, fee)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                RETURNING id, executed_at
-                """,
-                (buyer_id, user_id, resource_type, trade_qty, exec_price, fee),
-            )
-            trade_rec = cur.fetchone()
+        # Record trade in trades table
+        cur.execute(
+            """
+            INSERT INTO trades (buyer_id, seller_id, resource_type, amount, price, fee)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id, executed_at
+            """,
+            (buyer_id, seller_id, resource_type, trade_qty, exec_price, fee),
+        )
+        trade_rec = cur.fetchone()
 
-            # Regional tax dividend for controlling guild (0.5% of trade value)
-            credit_regional_trade_tax(cur, user_id, trade_value)
+        # Regional tax dividend for controlling guild (0.5% of trade value)
+        credit_regional_trade_tax(cur, seller_id, float(trade_value))
 
-            # Update maker order
-            new_maker_filled = round(float(maker["filled_amount"]) + trade_qty, 2)
-            maker_status = "FILLED" if new_maker_filled >= float(maker["amount"]) else "ACTIVE"
-            cur.execute(
-                "UPDATE market_orders SET filled_amount = %s, status = %s WHERE id = %s",
-                (new_maker_filled, maker_status, maker_id),
-            )
+        # Update maker order
+        new_maker_filled = Decimal(str(round(float(maker["filled_amount"]) + float(trade_qty), 2)))
+        maker_status = "FILLED" if new_maker_filled >= Decimal(str(maker["amount"])) else "ACTIVE"
+        cur.execute(
+            "UPDATE market_orders SET filled_amount = %s, status = %s WHERE id = %s",
+            (new_maker_filled, maker_status, maker_id),
+        )
 
-            remaining_amount = round(remaining_amount - trade_qty, 2)
-            filled_amount = round(filled_amount + trade_qty, 2)
+        remaining_amount = remaining_amount - trade_qty
+        filled_amount = filled_amount + trade_qty
 
-            trades_executed.append({
+        trades_executed.append({
+            "trade_id": trade_rec["id"],
+            "buyer_id": buyer_id,
+            "seller_id": seller_id,
+            "amount": float(trade_qty),
+            "price": float(exec_price),
+            "fee": float(fee),
+        })
+
+        # Dispatch trade notifications
+        create_notification(
+            cur,
+            user_id=buyer_id,
+            event_type="TRADE_EXECUTED",
+            payload={
+                "role": "BUYER",
                 "trade_id": trade_rec["id"],
-                "buyer_id": buyer_id,
-                "amount": trade_qty,
-                "price": exec_price,
-                "fee": fee,
-            })
+                "resource_type": resource_type,
+                "amount": float(trade_qty),
+                "price": float(exec_price),
+                "total_value": float(trade_value),
+                "fee": 0.0,
+                "counterparty_id": seller_id,
+            },
+        )
+        create_notification(
+            cur,
+            user_id=seller_id,
+            event_type="TRADE_EXECUTED",
+            payload={
+                "role": "SELLER",
+                "trade_id": trade_rec["id"],
+                "resource_type": resource_type,
+                "amount": float(trade_qty),
+                "price": float(exec_price),
+                "total_value": float(trade_value),
+                "payout": float(seller_payout),
+                "fee": float(fee),
+                "counterparty_id": buyer_id,
+            },
+        )
 
-            # Dispatch trade notifications
-            create_notification(
-                cur,
-                user_id=buyer_id,
-                event_type="TRADE_EXECUTED",
-                payload={
-                    "role": "BUYER",
-                    "trade_id": trade_rec["id"],
-                    "resource_type": resource_type,
-                    "amount": trade_qty,
-                    "price": exec_price,
-                    "total_value": trade_value,
-                    "fee": 0.0,
-                    "counterparty_id": user_id,
-                },
-            )
-            create_notification(
-                cur,
-                user_id=user_id,
-                event_type="TRADE_EXECUTED",
-                payload={
-                    "role": "SELLER",
-                    "trade_id": trade_rec["id"],
-                    "resource_type": resource_type,
-                    "amount": trade_qty,
-                    "price": exec_price,
-                    "total_value": trade_value,
-                    "payout": seller_payout,
-                    "fee": fee,
-                    "counterparty_id": buyer_id,
-                },
-            )
-
-    # 4. Final status for the newly placed order
-    final_status = "FILLED" if filled_amount >= amount else "ACTIVE"
+    # 11. Final status for the newly placed order
+    final_status = "FILLED" if filled_amount >= Decimal(str(amount)) else "ACTIVE"
     cur.execute(
         "UPDATE market_orders SET filled_amount = %s, status = %s WHERE id = %s",
         (filled_amount, final_status, new_order_id),
@@ -380,12 +362,13 @@ def place_and_match_order(
         "order_type": order_type,
         "resource_type": resource_type,
         "initial_amount": amount,
-        "filled_amount": filled_amount,
-        "remaining_amount": remaining_amount,
+        "filled_amount": float(filled_amount),
+        "remaining_amount": float(remaining_amount),
         "limit_price": limit_price,
         "status": final_status,
         "trades": trades_executed,
     }
+
 
 def cancel_order(cur, user_id: int, order_id: int) -> Dict[str, Any]:
     """
@@ -409,7 +392,7 @@ def cancel_order(cur, user_id: int, order_id: int) -> Dict[str, Any]:
     if order["status"] != "ACTIVE":
         raise ValueError(f"Order kann nicht storniert werden (Status: {order['status']}).")
 
-    unfilled = round(float(order["amount"]) - float(order["filled_amount"]), 2)
+    unfilled = Decimal(str(order["amount"])) - Decimal(str(order["filled_amount"]))
     if unfilled <= 0:
         cur.execute("UPDATE market_orders SET status = 'FILLED' WHERE id = %s", (order_id,))
         return {
@@ -422,21 +405,26 @@ def cancel_order(cur, user_id: int, order_id: int) -> Dict[str, Any]:
 
     # Atomic Refund with row-level updates
     if order["order_type"] == "BUY":
-        refund_funds = round(unfilled * float(order["limit_price"]), 2)
+        refund_funds = Decimal(str(round(float(unfilled) * float(order["limit_price"]), 2)))
         cur.execute("SELECT id FROM users WHERE id = %s FOR UPDATE", (user_id,))
         cur.execute("UPDATE users SET balance = balance + %s WHERE id = %s", (refund_funds, user_id))
-        refunded_amount = unfilled
-        refunded_gold = refund_funds
+        refunded_amount = float(unfilled)
+        refunded_gold = float(refund_funds)
     else:  # SELL
+        refund_goods = unfilled
+        cur.execute(
+            "SELECT amount FROM inventories WHERE user_id = %s AND resource_type = %s FOR UPDATE",
+            (user_id, order["resource_type"]),
+        )
         cur.execute(
             """
             UPDATE inventories
             SET amount = amount + %s
             WHERE user_id = %s AND resource_type = %s
             """,
-            (unfilled, user_id, order["resource_type"]),
+            (refund_goods, user_id, order["resource_type"]),
         )
-        refunded_amount = unfilled
+        refunded_amount = float(refund_goods)
         refunded_gold = 0.0
 
     cur.execute("UPDATE market_orders SET status = 'CANCELLED' WHERE id = %s", (order_id,))

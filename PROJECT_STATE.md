@@ -1,7 +1,7 @@
 # Project State: Handelsimperium
 
-**Generated:** 2026-09-13T10:00:00+02:00  
-**Repository Branch:** `master`  
+**Generated:** 2026-09-13T10:07:00+02:00  
+**Repository Branch:** `main`  
 **Current Phase:** Phase 10 (Dynamic Price Bands, Guild Territory & Kontor Auctions)  
 **Production Host:** `80.158.79.44` (`ssh server`)  
 **Public Endpoint:** [http://80.158.79.44/](http://80.158.79.44/)
@@ -61,12 +61,12 @@
 - *Constraint:* `UNIQUE(user_id, building_type)`
 
 ### 2.4 `inventories`
-- `id`: `SERIAL PRIMARY KEY`
 - `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
 - `resource_type`: `VARCHAR(32) NOT NULL` (`wood`, `stone`, `iron`, `grain`, `cloth`)
 - `amount`: `NUMERIC(14, 2) NOT NULL DEFAULT 0.0`
 - `last_calculated_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
-- *Constraint:* `UNIQUE(user_id, resource_type)`
+- *Primary Key:* `PRIMARY KEY (user_id, resource_type)`
+- *Constraint:* `CHECK (amount >= 0)`
 
 ### 2.5 `market_orders`
 - `id`: `SERIAL PRIMARY KEY`
@@ -396,17 +396,43 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
   - Tutorial Step 7 ("7. Die Macht der Hanse"): Disburses 200.00 Taler & 40.00 Eisen upon founding or joining an alliance.
   - Merchant Handbook (`/handbuch`): Section 9 ("Territoriale Kontrolle, Kontor-Auktionen & Kriegskasse") details price band math, auction mechanics, outbid guarantees, and territorial perks.
 
+### Stability & Core Engine Patches (Post-Phase 10 Integrity Patch)
+- **Deterministic Lock Ordering & Deadlock Prevention (`app/engine/matching.py`):**
+  - Eliminated concurrent PostgreSQL transaction deadlocks during simultaneous maker/taker matching and order execution.
+  - User IDs, order IDs, and inventory records are deterministically sorted in strict numerical/lexicographical ascending order (`ORDER BY ... ASC`) before executing `SELECT ... FOR UPDATE` locks.
+  - Corrected schema alignment across `matching.py` by removing erroneous references to a non-existent `id` column on the `inventories` table (keyed by `(user_id, resource_type)`).
+- **Cumulative Warehouse Capacity Enforcement (`app/engine/production.py` & `app/engine/caravans.py`):**
+  - Transformed warehouse storage cap from a per-commodity limit into a global cumulative ceiling: $\sum_{r \in \text{Commodities}} \text{amount}_r \le \text{storage\_cap}_{\text{effective}}$.
+  - In `calculate_offline_production`, if total generation across all commodities exceeds remaining warehouse volume ($\text{storage\_cap} - \sum \text{amount}_{\text{current}}$), surplus intake is distributed proportionally based on building generation rates, excess volume is discarded, and discarded units are tracked under `production_delta[r]["lost"]`.
+  - In `transfer_depot_to_kontor` (`app/engine/caravans.py`), transfer requests that would exceed the cumulative storage capacity are strictly rejected with `ValueError` (`"Nicht genügend Lagerkapazität im Zentrallager vorhanden"`).
+- **Three-Tier Price Corridor Fallback Hierarchy (`app/engine/matching.py`):**
+  - Hardened reference price discovery against zero-liquidity distortion:
+    1. **Tier 1 (24h-VWAP):** Volume-Weighted Average Price over preceding 24 hours if $\text{volume}_{24h} > 0$.
+    2. **Tier 2 (Historical Trade Price):** Most recent trade execution price when 24h volume is zero.
+    3. **Tier 3 (Canonical Base Price):** Configuration baseline price (`REFERENCE_PRICES[r]`) when no trading history exists.
+  - Price corridors remain strictly bounded to $[0.50 \times \text{ReferencePrice}, 2.00 \times \text{ReferencePrice}]$.
+- **Auction Expiration Verification (`app/engine/auctions.py` & `app/routes/guilds.py`):**
+  - Bids placed at or after epoch expiration (`NOW() >= epoch_end_at`) are rejected immediately with `ValueError` ("Auktion ist bereits abgelaufen").
+  - `handle_place_auction_bid` maps expiration errors to HTTP 422 Unprocessable Content.
+  - Automatic on-demand epoch resolution triggers immediately upon detecting an expired auction.
+- **Strict Decimal Numeric Type Casting:**
+  - Resolved `TypeError` incompatibilities between Python `float` and PostgreSQL `Decimal` types across `caravans.py`, `auctions.py`, `production.py`, `guilds.py`, and `matching.py`.
+  - All database inputs and arithmetic conversions cast values to `Decimal(str(round(val, 2)))` or `Decimal(str(round(val, 4)))` prior to execution.
+- **Zero-Yield Building Initialization (`app/engine/production.py` & `app/routes/auth_routes.py`):**
+  - For commodities where the merchant's home region has a `0.0` multiplier (import-only goods), buildings are initialized with `level = 0` and `production_rate = 0.0000` (instead of level 1 with 0 rate), reflecting that non-indigenous extraction infrastructure does not exist in the home settlement.
+
 ---
 
 ## 5. Test Suite Metrics
 
 All tests execute cleanly directly against PostgreSQL on the production server:
-- **Total Test Files:** 13
-- **Total Tests:** 55
-- **Pass Rate:** 100% (55 passed in 15.07s)
+- **Total Test Files:** 14
+- **Total Tests:** 61
+- **Pass Rate:** 100% (61 passed in 17.74s)
 
 | Test File | Tests | Coverage Scope |
 | :--- | :--- | :--- |
+| `tests/test_bugfixes.py` | 6 | Deadlock-free matching concurrency, Cumulative warehouse capacity, 3-tier price corridor hierarchy, Auction deadline rejection, Decimal precision casting, Zero-yield building initialization |
 | `tests/test_concurrent_orders.py` | 1 | Concurrent multi-threaded order matching ACID verification |
 | `tests/test_e2e_http.py` | 1 | Full end-to-end HTTP registration, building upgrade, and trade matching |
 | `tests/test_market_and_auth.py` | 3 | Password hashes, session tokens, building upgrades, order cancellation |

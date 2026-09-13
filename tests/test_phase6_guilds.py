@@ -306,7 +306,8 @@ def test_speicherstadt_storage_bonus_perk(db_conn):
         assert perk_cap == 1100.0  # +10% bonus
 
         # Check offline production cap enforcement
-        # Give both players 1200 wood in inventory
+        # Give both players 1200 wood in inventory (zero other resources to isolate cap)
+        cur.execute("UPDATE inventories SET amount = 0.0 WHERE resource_type != 'wood' AND user_id IN (%s, %s)", (non_id, mem_id))
         cur.execute("UPDATE inventories SET amount = 1200.0 WHERE resource_type = 'wood' AND user_id IN (%s, %s)", (non_id, mem_id))
         db_conn.commit()
 

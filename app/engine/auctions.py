@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Any, Optional, Tuple
 
@@ -120,13 +121,14 @@ def deposit_to_guild_bank(cur, user_id: int, amount: float) -> Dict[str, Any]:
             f"Unzureichendes Taler-Guthaben! Erforderlich: {amount:.2f} Taler, Verfügbar: {user_bal:.2f} Taler."
         )
 
-    cur.execute("UPDATE users SET balance = balance - %s WHERE id = %s", (amount, user_id))
+    amount_dec = Decimal(str(amount))
+    cur.execute("UPDATE users SET balance = balance - %s WHERE id = %s", (amount_dec, user_id))
 
     # Lock and update guild bank
     cur.execute("SELECT balance FROM guild_bank WHERE guild_id = %s FOR UPDATE", (guild_id,))
     gb_row = cur.fetchone()
-    cur.execute("UPDATE guild_bank SET balance = balance + %s WHERE guild_id = %s", (amount, guild_id))
-    new_bank_bal = (float(gb_row["balance"]) if gb_row else 0.0) + amount
+    cur.execute("UPDATE guild_bank SET balance = balance + %s WHERE guild_id = %s", (amount_dec, guild_id))
+    new_bank_bal = round((float(gb_row["balance"]) if gb_row else 0.0) + amount, 2)
 
     # Record in guild_contributions
     cur.execute(
@@ -134,7 +136,7 @@ def deposit_to_guild_bank(cur, user_id: int, amount: float) -> Dict[str, Any]:
         INSERT INTO guild_contributions (guild_id, user_id, contribution_type, resource_type, amount)
         VALUES (%s, %s, 'BANK_DEPOSIT', 'balance', %s)
         """,
-        (guild_id, user_id, amount),
+        (guild_id, user_id, amount_dec),
     )
 
     create_notification(
@@ -205,7 +207,8 @@ def place_kontor_auction_bid(cur, user_id: int, auction_id: int, bid_amount: flo
         epoch_end = epoch_end.replace(tzinfo=timezone.utc)
 
     if auction["status"] != "ACTIVE" or epoch_end <= now:
-        raise ValueError("Diese Kontor-Auktion ist bereits abgelaufen.")
+        resolve_kontor_auctions(cur)
+        raise ValueError("Auktion ist bereits abgelaufen.")
 
     current_highest = float(auction["current_highest_bid"])
     prev_bidder_guild_id = auction["highest_bidder_guild_id"]
@@ -216,15 +219,18 @@ def place_kontor_auction_bid(cur, user_id: int, auction_id: int, bid_amount: flo
         )
 
     # 4. Handle guild bank deductions & refunds
+    bid_amount_dec = Decimal(str(bid_amount))
+    current_highest_dec = Decimal(str(current_highest))
+
     if prev_bidder_guild_id == guild_id:
         # Same guild increasing its bid -> deduct only the increment
-        delta = round(bid_amount - current_highest, 2)
+        delta = Decimal(str(round(bid_amount - current_highest, 2)))
         cur.execute("SELECT balance FROM guild_bank WHERE guild_id = %s FOR UPDATE", (guild_id,))
         gb = cur.fetchone()
         current_funds = float(gb["balance"]) if gb else 0.0
-        if current_funds < delta:
+        if current_funds < float(delta):
             raise ValueError(
-                f"Unzureichende Gildenkasse! Erforderlich zur Erhöhung: {delta:.2f} Taler, In der Kasse: {current_funds:.2f} Taler."
+                f"Unzureichende Gildenkasse! Erforderlich zur Erhöhung: {float(delta):.2f} Taler, In der Kasse: {current_funds:.2f} Taler."
             )
         cur.execute("UPDATE guild_bank SET balance = balance - %s WHERE guild_id = %s", (delta, guild_id))
     else:
@@ -236,13 +242,13 @@ def place_kontor_auction_bid(cur, user_id: int, auction_id: int, bid_amount: flo
             raise ValueError(
                 f"Unzureichende Gildenkasse! Erforderlich für Gebot: {bid_amount:.2f} Taler, In der Kasse: {current_funds:.2f} Taler."
             )
-        cur.execute("UPDATE guild_bank SET balance = balance - %s WHERE guild_id = %s", (bid_amount, guild_id))
+        cur.execute("UPDATE guild_bank SET balance = balance - %s WHERE guild_id = %s", (bid_amount_dec, guild_id))
 
         # Refund previous outbid guild if there was one
         if prev_bidder_guild_id and current_highest > 0:
             cur.execute(
                 "UPDATE guild_bank SET balance = balance + %s WHERE guild_id = %s",
-                (current_highest, prev_bidder_guild_id),
+                (current_highest_dec, prev_bidder_guild_id),
             )
             # Notify previous guild leader
             cur.execute("SELECT leader_id, tag FROM guilds WHERE id = %s", (prev_bidder_guild_id,))
@@ -267,7 +273,7 @@ def place_kontor_auction_bid(cur, user_id: int, auction_id: int, bid_amount: flo
         INSERT INTO guild_contributions (guild_id, user_id, contribution_type, resource_type, amount)
         VALUES (%s, %s, 'AUCTION_BID', 'balance', %s)
         """,
-        (guild_id, user_id, bid_amount),
+        (guild_id, user_id, bid_amount_dec),
     )
 
     # 6. Update auction
@@ -277,7 +283,7 @@ def place_kontor_auction_bid(cur, user_id: int, auction_id: int, bid_amount: flo
         SET current_highest_bid = %s, highest_bidder_guild_id = %s
         WHERE id = %s
         """,
-        (bid_amount, guild_id, auction_id),
+        (bid_amount_dec, guild_id, auction_id),
     )
 
     return {

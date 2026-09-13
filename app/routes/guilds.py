@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -16,13 +17,14 @@ from app.engine.guilds import (
 from app.engine.auctions import (
     deposit_to_guild_bank,
     place_kontor_auction_bid,
+    resolve_kontor_auctions,
     get_kontor_auctions_overview,
 )
 
 router = APIRouter(prefix="/guilds", tags=["guilds"])
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "../templates"))
 
-def render_guild_response(request: Request, user_id: int, message: str = None, error: str = None) -> HTMLResponse:
+def render_guild_response(request: Request, user_id: int, message: str = None, error: str = None, status_code: int = 200) -> HTMLResponse:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT id, username, balance FROM users WHERE id = %s", (user_id,))
@@ -47,6 +49,7 @@ def render_guild_response(request: Request, user_id: int, message: str = None, e
             "message": message,
             "error": error,
         },
+        status_code=status_code,
     )
 
 @router.get("", response_class=HTMLResponse)
@@ -205,8 +208,27 @@ def handle_place_auction_bid(
     """
     message = None
     error = None
+    status_code = 200
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            # Query auction record and execute resolve_kontor_auctions if NOW() >= epoch_end_at
+            cur.execute("SELECT epoch_end_at, status FROM kontor_auctions WHERE id = %s", (auction_id,))
+            auc_row = cur.fetchone()
+            now = datetime.now(timezone.utc)
+            if auc_row:
+                epoch_end = auc_row["epoch_end_at"]
+                if epoch_end.tzinfo is None:
+                    epoch_end = epoch_end.replace(tzinfo=timezone.utc)
+                if auc_row["status"] != "ACTIVE" or now >= epoch_end:
+                    resolve_kontor_auctions(cur)
+                    conn.commit()
+                    return render_guild_response(
+                        request,
+                        user["id"],
+                        error="Auktion ist bereits abgelaufen.",
+                        status_code=422,
+                    )
+
             try:
                 res = place_kontor_auction_bid(cur, user["id"], auction_id, bid_amount)
                 conn.commit()
@@ -214,7 +236,9 @@ def handle_place_auction_bid(
             except ValueError as e:
                 conn.rollback()
                 error = str(e)
+                if "abgelaufen" in error.lower():
+                    status_code = 422
             except Exception as e:
                 conn.rollback()
                 error = f"Fehler bei der Gebotsabgabe: {str(e)}"
-    return render_guild_response(request, user["id"], message=message, error=error)
+    return render_guild_response(request, user["id"], message=message, error=error, status_code=status_code)

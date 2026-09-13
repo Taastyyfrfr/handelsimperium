@@ -23,6 +23,7 @@ def test_catchup_calculation_gains_and_caps(db_conn):
         )
         user_id = cur.fetchone()["id"]
         ensure_user_entities(cur, user_id)
+        cur.execute("UPDATE inventories SET amount = 0.00 WHERE user_id = %s AND resource_type != 'wood'", (user_id,))
         
         # Set initial inventory: wood at 800 units, calculated 1 hour ago
         # Rate for lumberjack is 0.25 / sec. In 3600s: 900 units generated.
