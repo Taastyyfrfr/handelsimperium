@@ -180,6 +180,22 @@
                         </span>
                     </div>
                 </div>
+
+                {% if price_chart_svg %}
+                <!-- Zero-Dependency Inline SVG Price Chart -->
+                <div class="mt-4 pt-4 border-t border-slate-800 space-y-2">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider flex items-center space-x-1.5">
+                            <span>📈</span>
+                            <span>Preistrend & 24h-VWAP</span>
+                        </span>
+                        <span class="text-[10px] text-amber-400/80 font-mono">Hansebörse</span>
+                    </div>
+                    <div class="w-full rounded-xl bg-slate-950 p-2 border border-slate-800/80 overflow-hidden shadow-inner">
+                        {{ price_chart_svg | safe }}
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
 

@@ -9,6 +9,8 @@ from app.models import OrderCreate
 from app.rate_limiter import rate_limit
 from app.engine.matching import place_and_match_order, cancel_order, get_order_book, get_price_corridor
 from app.engine.production import calculate_offline_production
+from app.engine.charts import generate_price_chart_svg
+from app.engine.convoys import simulate_npc_convoys
 import os
 
 router = APIRouter(prefix="/market", tags=["market"])
@@ -33,6 +35,9 @@ def market_book_view(
             inventories = {r["resource_type"]: float(r["amount"]) for r in cur.fetchall()}
             book_data = get_order_book(cur, resource, user["id"])
             price_floor, price_ceiling, ref_price = get_price_corridor(cur, resource)
+            # Request-cycle simulation for autonomous Hanseatic NPC convoys
+            simulate_npc_convoys(cur)
+            price_chart_svg = generate_price_chart_svg(cur, resource)
             conn.commit()
 
     return templates.TemplateResponse(
@@ -54,6 +59,7 @@ def market_book_view(
             "volume_24h": book_data.get("volume_24h"),
             "trade_count_24h": book_data.get("trade_count_24h"),
             "recent_trades": book_data.get("recent_trades", []),
+            "price_chart_svg": price_chart_svg,
             "message": None,
             "error": None,
         },
@@ -135,6 +141,8 @@ def create_market_order(
             inventories = {r["resource_type"]: float(r["amount"]) for r in cur.fetchall()}
             book_data = get_order_book(cur, resource_type, user["id"])
             price_floor, price_ceiling, ref_price = get_price_corridor(cur, resource_type)
+            simulate_npc_convoys(cur)
+            price_chart_svg = generate_price_chart_svg(cur, resource_type)
             conn.commit()
 
     return templates.TemplateResponse(
@@ -156,6 +164,7 @@ def create_market_order(
             "volume_24h": book_data.get("volume_24h"),
             "trade_count_24h": book_data.get("trade_count_24h"),
             "recent_trades": book_data.get("recent_trades", []),
+            "price_chart_svg": price_chart_svg,
             "message": message,
             "error": error,
         },
@@ -207,6 +216,7 @@ def cancel_market_order(
             inventories = {r["resource_type"]: float(r["amount"]) for r in cur.fetchall()}
             book_data = get_order_book(cur, resource_type, user["id"])
             price_floor, price_ceiling, ref_price = get_price_corridor(cur, resource_type)
+            price_chart_svg = generate_price_chart_svg(cur, resource_type)
             conn.commit()
 
     return templates.TemplateResponse(
@@ -228,6 +238,7 @@ def cancel_market_order(
             "volume_24h": book_data.get("volume_24h"),
             "trade_count_24h": book_data.get("trade_count_24h"),
             "recent_trades": book_data.get("recent_trades", []),
+            "price_chart_svg": price_chart_svg,
             "message": message,
             "error": error,
         },

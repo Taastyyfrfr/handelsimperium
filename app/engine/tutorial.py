@@ -59,6 +59,14 @@ TUTORIAL_STEPS = {
         "reward_desc": "200.00 Taler & 40 Eisen",
         "reward": {"balance": 200.0, "resources": {"iron": 40.0}},
     },
+    8: {
+        "step_id": 8,
+        "title": "8. Marktanalyse & Flottenarbitrage",
+        "description": "Beobachte die dynamischen Preistrends der Hanse und nutze die Flottenarbitrage: Platziere kluge Kauf- oder Verkaufsorders an der Börse und schließe mindestens 2 Börsenhandel ab.",
+        "requirement_text": "Mindestens 2 ausgeführte Börsenhandel (Trades) abschließen.",
+        "reward_desc": "150.00 Taler & 30 Eisen",
+        "reward": {"balance": 150.0, "resources": {"iron": 30.0}},
+    },
 }
 
 def ensure_user_tutorial(cur, user_id: int) -> Dict[str, Any]:
@@ -168,6 +176,19 @@ def is_step_eligible(cur, user_id: int, step_id: int) -> bool:
             (user_id,),
         )
         return cur.fetchone() is not None
+
+    elif step_id == 8:
+        # Step 8: Verifies at least 2 filled trades for the player (buyer or seller)
+        cur.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM trades
+            WHERE buyer_id = %s OR seller_id = %s
+            """,
+            (user_id, user_id),
+        )
+        row = cur.fetchone()
+        return (row["cnt"] if row else 0) >= 2
 
     return False
 

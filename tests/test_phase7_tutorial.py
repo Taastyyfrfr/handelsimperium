@@ -166,18 +166,40 @@ def test_tutorial_progression_and_rewards(db_conn):
         # Step 7: Macht der Hanse (user is already leader of TutorialGuild_{ts})
         assert is_step_eligible(cur, u_id, 7) is True
 
-        # Claim Step 7 (Final Step: 200 Taler & 40 Eisen)
+        # Claim Step 7 (200 Taler & 40 Eisen)
         cur.execute("SELECT balance FROM users WHERE id = %s", (u_id,))
         bal_before_s7 = float(cur.fetchone()["balance"])
         res7 = claim_tutorial_reward(cur, u_id)
         db_conn.commit()
         assert res7["claimed_step"] == 7
-        assert res7["is_finished"] is True
+        assert res7["next_step"] == 8
+        assert res7["is_finished"] is False
 
         cur.execute("SELECT balance FROM users WHERE id = %s", (u_id,))
         assert float(cur.fetchone()["balance"]) == round(bal_before_s7 + 200.0, 2)
         cur.execute("SELECT amount FROM inventories WHERE user_id = %s AND resource_type = 'iron'", (u_id,))
         assert float(cur.fetchone()["amount"]) >= 40.0
+
+        # Step 8: Marktanalyse & Flottenarbitrage
+        assert is_step_eligible(cur, u_id, 8) is False
+        cur.execute("SELECT id FROM users WHERE id != %s LIMIT 1", (u_id,))
+        partner_id = cur.fetchone()["id"]
+        cur.execute(
+            """
+            INSERT INTO trades (buyer_id, seller_id, resource_type, amount, price, fee, executed_at)
+            VALUES (%s, %s, 'wood', 1.0, 4.0, 0.08, NOW()),
+                   (%s, %s, 'stone', 1.0, 5.0, 0.10, NOW())
+            """,
+            (u_id, partner_id, partner_id, u_id),
+        )
+        db_conn.commit()
+        assert is_step_eligible(cur, u_id, 8) is True
+
+        # Claim Step 8 (Final Step: 150 Taler & 30 Eisen)
+        res8 = claim_tutorial_reward(cur, u_id)
+        db_conn.commit()
+        assert res8["claimed_step"] == 8
+        assert res8["is_finished"] is True
 
         # Further claims rejected
         with pytest.raises(ValueError, match="vollständig abgeschlossen"):

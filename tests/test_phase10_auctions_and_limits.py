@@ -422,7 +422,8 @@ def test_tutorial_step7_completion(db_conn):
         db_conn.commit()
 
         assert claim_res["claimed_step"] == 7
-        assert claim_res["is_finished"] is True
+        assert claim_res["next_step"] == 8
+        assert claim_res["is_finished"] is False
 
         # Verify reward
         cur.execute("SELECT balance FROM users WHERE id = %s", (uid,))

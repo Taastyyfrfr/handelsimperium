@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Regression Test Suite
+    runs-on: ubuntu-24.04
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: handelsimperium
+          POSTGRES_USER: handelsimperium_user
+          POSTGRES_PASSWORD: imperium_secret_2026
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Apply database migrations sequentially
+        env:
+          PGPASSWORD: imperium_secret_2026
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+          for f in $(ls migrations/*.sql | sort -V); do
+            echo "Applying $f..."
+            psql -h localhost -p 5432 -U handelsimperium_user -d handelsimperium -f "$f"
+          done
+
+      - name: Run test suite
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: handelsimperium_user
+          DB_PASS: imperium_secret_2026
+          DB_NAME: handelsimperium
+          SECRET_KEY: ci-test-secret-key-2026
+        run: |
+          pytest -v

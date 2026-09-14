@@ -57,6 +57,9 @@
                 <a href="#handbuch-auktionen" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
                     9. Marktschutz & Kontor-Auktionen
                 </a>
+                <a href="#handbuch-flotten" class="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-amber-300 transition">
+                    11. Hanseflotten & Preischarts
+                </a>
             </div>
         </div>
 
@@ -395,6 +398,65 @@
                         <p class="text-[11px] leading-relaxed">
                             Erhöht eine Gilde ihr eigenes Gebot, wird nur die Differenz aus der Gildenkasse abgebucht. Wird eine Gilde von einem Rivalen überboten, wird der volle Betrag des bisherigen Höchstgebots augenblicklich und atomar in die Gildenkasse des Vorbieters zurückerstattet.
                         </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 11. Autonome Hanseflotten & Preischart-Analyse -->
+            <section id="handbuch-flotten" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex items-center space-x-3 border-b border-slate-800 pb-3">
+                    <span class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold text-sm">11</span>
+                    <h3 class="text-base font-bold text-slate-100">11. Autonome Hanseflotten & Preischart-Analyse</h3>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Die Meere und Handelswege der Hanse werden kontinuierlich von autonomen Handelskonvois befahren. Diese Flotten gleichen regionale Rohstoffdefizite aus, sorgen für Marktliquidität und bieten findigen Kaufleuten Arbitrage-Möglichkeiten.
+                </p>
+
+                <!-- Spawn-Bedingungen & Arbitrage-Routen -->
+                <div class="space-y-2">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400">Spawn-Bedingungen & Arbitrage-Routen</h4>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Das Hanse-Netzwerk unterhält stets <strong>mindestens 4 aktive autonome Konvois</strong>. Ein Konvoi transportiert stets Überschusswaren aus einer Förderregion mit Produktionsmultiplikator &gt; 1.0x in eine Defizitregion, in der das Gut überhaupt nicht gewonnen werden kann (Multiplikator 0.0x):
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
+                        <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-amber-300 space-y-1">
+                            <div class="text-[10px] uppercase font-bold text-slate-400">Überschuss &rarr; Mangelroute:</div>
+                            <div class="font-sans text-xs">Beispiel: Danzig (Holz 1.5x) &rarr; Köln (Holz 0.0x) oder Visby (Eisen 1.6x) &rarr; Danzig (Eisen 0.0x).</div>
+                        </div>
+                        <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-emerald-300 space-y-1">
+                            <div class="text-[10px] uppercase font-bold text-slate-400">Reisedauer & Distanz:</div>
+                            <div class="font-sans text-xs">Konvois nutzen die euklidische Distanzformel: Reisedauer in Sekunden = round(Distanz × 12.0).</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Liquidationslogik bei Ankunft -->
+                <div class="space-y-2 pt-3 border-t border-slate-800">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400">Liquidationslogik bei Ankunft</h4>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Erreicht ein NPC-Konvoi seinen Zielhafen, wird die Fracht determiniert an der Börse liquidiert:
+                    </p>
+                    <ul class="list-disc list-inside space-y-1 text-xs text-slate-300 pl-2">
+                        <li><strong>Kauforder-Matching:</strong> Die ankommende Fracht bedient sofort offene Kaufgebote (BUY-Orders) von Spielern, die innerhalb der zulässigen Preisspanne liegen, nach Preispriorität.</li>
+                        <li><strong>Restbestände als Ask-Order:</strong> Verbleibt unverkaufte Restfracht, stellt die Hanseflotte ein ruhendes Verkaufsangebot (SELL) zum fairen Preis von <strong>1.10 × Referenzpreis</strong> ein.</li>
+                    </ul>
+                </div>
+
+                <!-- Preischart-Analyse -->
+                <div class="space-y-2 pt-3 border-t border-slate-800">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400">Inline-SVG Preischart & Börsenindikatoren</h4>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Das integrierte Preischart visualisiert die Preisentwicklung der letzten 24 Stunden ohne externe Skripte:
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-slate-300 space-y-1">
+                            <span class="font-bold text-amber-400 block">Gestrichelte Linie (VWAP):</span>
+                            <p class="text-[11px] text-slate-400">Zeigt den volumengewichteten 24h-Durchschnittspreis an. Liegt der aktuelle Börsenkurs unter dem VWAP, gilt die Ware historisch als günstig bewertet.</p>
+                        </div>
+                        <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-slate-300 space-y-1">
+                            <span class="font-bold text-emerald-400 block">Farbcodierung (Grün / Rot):</span>
+                            <p class="text-[11px] text-slate-400">Grüne Chartkurven signalisieren steigende Handelspreise, rote Kurven weisen auf fallende Marktpreise hin.</p>
+                        </div>
                     </div>
                 </div>
             </section>
