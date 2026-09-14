@@ -1,6 +1,6 @@
 # Project State: Handelsimperium
 
-**Generated:** 2026-09-14T07:15:00+02:00  
+**Generated:** 2026-09-14T19:42:00+02:00  
 **Repository Branch:** `main`  
 **Latest Git Commit:** `883b165168ca323639b1994e632181d641b68785`  
 **Current Version:** `v1.11.0`  
@@ -490,12 +490,13 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
 ## 5. Test Suite Metrics
 
 All tests execute cleanly directly against PostgreSQL on the production server:
-- **Total Test Files:** 17
-- **Total Tests:** 79
-- **Pass Rate:** 100% (79 passed in 19.66s)
+- **Total Test Files:** 18
+- **Total Tests:** 92
+- **Pass Rate:** 100% (92 passed in 32.90s)
 
 | Test File | Tests | Coverage Scope |
 | :--- | :--- | :--- |
+| `tests/test_all_features_and_buttons.py` | 13 | Comprehensive end-to-end verification of every button, form, tab, and action: Registration & validation, Login/Logout, Dashboard brand & all 8 tabs, Building upgrades & zero-yield guards, Offline catchup modal & dismiss, Tutorial drawer & quest claims, Market tabs & corridor bounds & order cancel, Export contracts & fulfill button, Expeditions dispatch & depot unload & return transit, Guild lifecycle & war chest & monument & auctions, Notifications dropdown & read-all button, Inline SVG charts & admin telemetry, System health |
 | `tests/test_bugfixes.py` | 6 | Deadlock-free matching concurrency, Cumulative warehouse capacity, 3-tier price corridor hierarchy, Auction deadline rejection, Decimal precision casting, Zero-yield building initialization |
 | `tests/test_concurrent_orders.py` | 1 | Concurrent multi-threaded order matching ACID verification |
 | `tests/test_e2e_http.py` | 1 | Full end-to-end HTTP registration, building upgrade, and trade matching |
