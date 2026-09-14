@@ -18,7 +18,9 @@ from app.routes.tutorial import router as tutorial_router
 from app.routes.handbook import router as handbook_router
 from app.routes.admin import router as admin_router
 from app.routes.caravans import router as caravans_router
+from app.config import APP_VERSION
 import os
+import sys
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,7 +52,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Handelsimperium",
     description="Browser-based idle trading game with atomic order book",
-    version="1.0.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -78,9 +80,29 @@ app.include_router(handbook_router)
 app.include_router(admin_router)
 app.include_router(caravans_router)
 
+# Inject global template variables into all router Jinja2 environments
+for mod_name in [
+    "app.routes.auth_routes",
+    "app.routes.game_routes",
+    "app.routes.resources",
+    "app.routes.buildings",
+    "app.routes.market",
+    "app.routes.trades",
+    "app.routes.ranking",
+    "app.routes.notifications",
+    "app.routes.contracts",
+    "app.routes.guilds",
+    "app.routes.tutorial",
+    "app.routes.handbook",
+    "app.routes.caravans",
+]:
+    mod = sys.modules.get(mod_name)
+    if mod and hasattr(mod, "templates"):
+        mod.templates.env.globals["APP_VERSION"] = APP_VERSION
+
 @app.get("/health")
 @app.head("/health")
 @app.head("/")
 def health_check():
-    return {"status": "ok", "app": "Handelsimperium"}
+    return {"status": "ok", "app": "Handelsimperium", "version": APP_VERSION}
 

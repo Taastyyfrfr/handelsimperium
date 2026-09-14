@@ -54,7 +54,7 @@
                 <a href="/" class="text-xl font-black tracking-wider text-amber-400 hover:text-amber-300 transition">
                     HANDELSIMPERIUM
                 </a>
-                <span class="text-xs px-2 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-800/50 font-mono">v1.0</span>
+                <span class="text-xs px-2 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-800/50 font-mono">v{{ APP_VERSION|default("1.11.0") }}</span>
             </div>
 
             {% if user %}
@@ -117,7 +117,7 @@
 
     <!-- Footer -->
     <footer class="border-t border-slate-800/60 py-4 text-center text-xs text-slate-500">
-        Handelsimperium &copy; 2026 &bull; Offline-Produktion &bull; Atomares Orderbuch (2% Marktgebühr)
+        Handelsimperium &copy; 2026 &bull; v{{ APP_VERSION|default("1.11.0") }} &bull; Offline-Produktion &bull; Atomares Orderbuch (2% Marktgebühr)
     </footer>
 
     <!-- Service Worker Registration & UI Listeners -->

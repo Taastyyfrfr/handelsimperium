@@ -20,7 +20,7 @@
         </div>
         <div class="bg-slate-950/80 border border-slate-800 px-4 py-2.5 rounded-xl text-right text-xs shrink-0">
             <span class="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Server-Regelwerk</span>
-            <span class="text-amber-400 font-mono font-bold mt-0.5 block">v1.0 Synchron</span>
+            <span class="text-amber-400 font-mono font-bold mt-0.5 block">v{{ APP_VERSION|default("1.11.0") }} Synchron</span>
         </div>
     </div>
 
@@ -457,6 +457,87 @@
                             <span class="font-bold text-emerald-400 block">Farbcodierung (Grün / Rot):</span>
                             <p class="text-[11px] text-slate-400">Grüne Chartkurven signalisieren steigende Handelspreise, rote Kurven weisen auf fallende Marktpreise hin.</p>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Versions- und Veröffentlichungsgeschichte (SemVer Releases) -->
+                <div class="space-y-2 pt-3 border-t border-slate-800">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400">Chronik der Hanseatischen Versionsstände (SemVer)</h4>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Das Wirtschaftssystem wird unter standardisierten Semantic-Versioning-Regeln kontinuierlich erweitert:
+                    </p>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-[11px] text-left border border-slate-800 rounded-lg overflow-hidden">
+                            <thead class="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800">
+                                <tr>
+                                    <th class="p-2 text-amber-400 font-mono">Version</th>
+                                    <th class="p-2">Hanseatischer Meilenstein</th>
+                                    <th class="p-2">Kernsysteme & Funktionalität</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800/60 bg-slate-900/40 text-slate-300">
+                                <tr>
+                                    <td class="p-2 font-mono font-bold text-amber-300">v1.0.0</td>
+                                    <td class="p-2 font-semibold text-slate-200">Grundsteinlegung & Orderbuch</td>
+                                    <td class="p-2 text-slate-400">Atomares Limit-Orderbuch, PostgreSQL-Transaktionen, 2% Marktgebühr.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 font-mono font-bold text-amber-300">v1.1.0</td>
+                                    <td class="p-2 font-semibold text-slate-200">Wirtschaftskreislauf & Speicher</td>
+                                    <td class="p-2 text-slate-400">Betriebsausbau, Lagerkapazitätsskalierung und Stornierungsrückvergütungen.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 font-mono font-bold text-amber-300">v1.2.0</td>
+                                    <td class="p-2 font-semibold text-slate-200">Catch-Up & Preisfindung</td>
+                                    <td class="p-2 text-slate-400">Deterministische Offline-Produktion, 24h-Durchschnittspreise & Token Bucket Rate Limiting.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 font-mono font-bold text-amber-300">v1.3.0</td>
+                                    <td class="p-2 font-semibold text-slate-200">Reichtumsranking & PWA</td>
+                                    <td class="p-2 text-slate-400">Vermögensrangliste der Hanse, Double-Submit Cookie CSRF-Schutz & Offline-PWA.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 font-mono font-bold text-amber-300">v1.4.0</td>
+                                    <td class="p-2 font-semibold text-slate-200">Kaiserliche Karawanen & Telemetrie</td>
+                                    <td class="p-2 text-slate-400">Tägliche Export-Kontrakte als Preisuntergrenze, Audit-Logbuch & Wirtschafts-Telemetrie.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 font-mono font-bold text-amber-300">v1.5.0</td>
+                                    <td class="p-2 font-semibold text-slate-200">Kaufmannsgilden & Monumente</td>
+                                    <td class="p-2 text-slate-400">Gildengründung, genossenschaftlicher Monumentbau & globale Produktionsboni.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 font-mono font-bold text-amber-300">v1.6.0</td>
+                                    <td class="p-2 font-semibold text-slate-200">Kaufmannslehre & Hanse-Handbuch</td>
+                                    <td class="p-2 text-slate-400">8-stufige interaktive Lehre, Terminal-Design & lebendes Handbuch.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 font-mono font-bold text-amber-300">v1.7.0</td>
+                                    <td class="p-2 font-semibold text-slate-200">Regionalmatrix & Asymmetrie</td>
+                                    <td class="p-2 text-slate-400">6 Hansehäfen, 2D-Koordinatenmatrix, komparative Produktionsvorteile & Handelsanreize.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 font-mono font-bold text-amber-300">v1.8.0</td>
+                                    <td class="p-2 font-semibold text-slate-200">Übersee-Expeditionen & Depots</td>
+                                    <td class="p-2 text-slate-400">Warentransit mit Laufzeiten nach euklidischer Distanz & Auslandsdepots.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 font-mono font-bold text-amber-300">v1.9.0</td>
+                                    <td class="p-2 font-semibold text-slate-200">Dynamische Preisbänder & Auktionen</td>
+                                    <td class="p-2 text-slate-400">&plusmn;50% Volatilitätsschutz, Gilden-Territorien & Kontor-Pachtauktionen.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 font-mono font-bold text-amber-300">v1.10.0</td>
+                                    <td class="p-2 font-semibold text-slate-200">Wirtschaftliche Integrität</td>
+                                    <td class="p-2 text-slate-400">Price-Improvement-Rückerstattungen, Wash-Trading-Prävention & physische Rückreise-Karawanen.</td>
+                                </tr>
+                                <tr class="bg-amber-950/20 border-l-2 border-amber-400">
+                                    <td class="p-2 font-mono font-bold text-amber-400">v1.11.0</td>
+                                    <td class="p-2 font-semibold text-amber-300">Autonome Konvois & Preischarts</td>
+                                    <td class="p-2 text-slate-300">Autonome NPC-Arbitrageflotten, Zero-Dependency Inline-SVG Charts & GitHub Actions CI.</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>

@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "Handelsimperium"
+    APP_VERSION: str = "1.11.0"
     SECRET_KEY: str = os.getenv("SECRET_KEY", "super-secret-imperium-key-2026-change-in-prod")
     COOKIE_NAME: str = "imperium_session"
     
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
         return f"host={self.DB_HOST} port={self.DB_PORT} user={self.DB_USER} password={self.DB_PASS} dbname={self.DB_NAME}"
 
 settings = Settings()
+APP_VERSION = settings.APP_VERSION
 
 # Canonical reference commodity prices (fallback when no 24h trades exist)
 REFERENCE_PRICES = {

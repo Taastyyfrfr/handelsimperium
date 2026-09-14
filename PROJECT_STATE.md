@@ -1,8 +1,10 @@
 # Project State: Handelsimperium
 
-**Generated:** 2026-09-13T10:48:00+02:00  
+**Generated:** 2026-09-14T07:15:00+02:00  
 **Repository Branch:** `main`  
-**Current Phase:** Phase 10 (Dynamic Price Bands, Guild Territory & Kontor Auctions) + Economic Integrity & Logistics Consistency Hardening  
+**Latest Git Commit:** `883b165168ca323639b1994e632181d641b68785`  
+**Current Version:** `v1.11.0`  
+**Release Tag:** [`v1.11.0`](https://github.com/Taastyyfrfr/handelsimperium/releases/tag/v1.11.0)  
 **Production Host:** `80.158.79.44` (`ssh server`)  
 **Public Endpoint:** [http://80.158.79.44/](http://80.158.79.44/)
 
@@ -27,7 +29,7 @@
 
 ## 2. Database Schema Snapshot
 
-### 2.1 `regions` (Phase 8)
+### 2.1 `regions` (v1.7.0)
 - `id`: `SERIAL PRIMARY KEY`
 - `name`: `VARCHAR(64) UNIQUE NOT NULL`
 - `tag`: `VARCHAR(4) UNIQUE NOT NULL`
@@ -46,7 +48,7 @@
 - `username`: `VARCHAR(64) UNIQUE NOT NULL`
 - `password_hash`: `VARCHAR(255) NOT NULL`
 - `balance`: `NUMERIC(14, 2) NOT NULL DEFAULT 200.00`
-- `region_id`: `INT REFERENCES regions(id)` (Phase 8, fallback to `DANZ`)
+- `region_id`: `INT REFERENCES regions(id)` (v1.7.0, fallback to `DANZ`)
 - `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - `last_active_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - *Index:* `idx_users_region_id ON users(region_id)`
@@ -101,7 +103,7 @@
 - `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - *Index:* `idx_user_catchups_lookup ON (user_id, dismissed)`
 
-### 2.8 `notifications` (Phase 5)
+### 2.8 `notifications` (v1.4.0)
 - `id`: `SERIAL PRIMARY KEY`
 - `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
 - `event_type`: `VARCHAR(32) NOT NULL` (`TRADE_EXECUTED`, `CONTRACT_FULFILLED`, `STORAGE_OVERFLOW`, `GUILD_CREATED`, `GUILD_JOINED`, `MONUMENT_COMPLETED`, `TUTORIAL_REWARD_CLAIMED`, `CARAVAN_DISPATCHED`, `CARAVAN_ARRIVED`, `CARAVAN_UNLOADED`, `DEPOT_TRANSFERRED`)
@@ -110,7 +112,7 @@
 - `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - *Index:* `idx_notifications_user ON (user_id, is_read, created_at DESC)`
 
-### 2.9 `export_contracts` (Phase 5)
+### 2.9 `export_contracts` (v1.4.0)
 - `id`: `SERIAL PRIMARY KEY`
 - `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
 - `contract_date`: `DATE NOT NULL`
@@ -125,7 +127,7 @@
 - *Constraints:* `UNIQUE(user_id, contract_date, resource_type)`
 - *Index:* `idx_export_contracts_user_date ON (user_id, contract_date, status)`
 
-### 2.10 `guilds` (Phase 6)
+### 2.10 `guilds` (v1.5.0)
 - `id`: `SERIAL PRIMARY KEY`
 - `name`: `VARCHAR(64) UNIQUE NOT NULL`
 - `tag`: `VARCHAR(6) UNIQUE NOT NULL`
@@ -134,7 +136,7 @@
 - `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - *Index:* `idx_guilds_leader ON (leader_id)`
 
-### 2.11 `guild_members` (Phase 6)
+### 2.11 `guild_members` (v1.5.0)
 - `id`: `SERIAL PRIMARY KEY`
 - `guild_id`: `INT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE`
 - `user_id`: `INT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE`
@@ -143,13 +145,13 @@
 - *Index:* `idx_guild_members_user ON (user_id)`
 - *Index:* `idx_guild_members_guild ON (guild_id)`
 
-### 2.12 `guild_bank` & `guild_bank_inventory` (Phase 6)
+### 2.12 `guild_bank` & `guild_bank_inventory` (v1.5.0)
 - `guild_bank.guild_id`: `INT PRIMARY KEY REFERENCES guilds(id) ON DELETE CASCADE`
 - `guild_bank.balance`: `NUMERIC(14, 2) NOT NULL DEFAULT 0.0`
 - `guild_bank_inventory`: `(guild_id INT, resource_type VARCHAR(32), amount NUMERIC(14, 2) DEFAULT 0.0)`
 - *Constraint:* `PRIMARY KEY (guild_id, resource_type)`
 
-### 2.13 `guild_projects` (Phase 6)
+### 2.13 `guild_projects` (v1.5.0)
 - `id`: `SERIAL PRIMARY KEY`
 - `guild_id`: `INT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE`
 - `project_type`: `VARCHAR(32) NOT NULL` (`FREIHAFEN`, `SPEICHERSTADT`)
@@ -162,7 +164,7 @@
 - *Index:* `idx_guild_projects_lookup ON (guild_id, is_completed)`
 - *Index:* `idx_guild_projects_perk ON (guild_id, project_type, is_completed)`
 
-### 2.14 `user_tutorials` (Phase 7, 9 & 10)
+### 2.14 `user_tutorials` (v1.6.0, v1.8.0, v1.9.0 & v1.11.0)
 - `user_id`: `INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE`
 - `current_step`: `INT NOT NULL DEFAULT 1`
 - `completed_steps`: `JSONB NOT NULL DEFAULT '[]'::jsonb`
@@ -170,7 +172,7 @@
 - `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - *Index:* `idx_user_tutorials_lookup ON (user_id, is_finished)`
 
-### 2.15 `caravans` (Phase 9 & Integrity Patch)
+### 2.15 `caravans` (v1.8.0 & v1.10.0)
 - `id`: `SERIAL PRIMARY KEY`
 - `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
 - `origin_region_id`: `INT NOT NULL REFERENCES regions(id)`
@@ -183,7 +185,7 @@
 - *Constraint:* `CHECK (status IN ('EN_ROUTE', 'ARRIVED', 'UNLOADED', 'CANCELLED'))`
 - *Index:* `idx_caravans_user_status_arrival ON caravans(user_id, status, arrival_at)`
 
-### 2.16 `regional_depots` (Phase 9 & Integrity Patch)
+### 2.16 `regional_depots` (v1.8.0 & v1.10.0)
 - `id`: `SERIAL PRIMARY KEY`
 - `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
 - `region_id`: `INT NOT NULL REFERENCES regions(id)`
@@ -193,7 +195,7 @@
 - *Constraint:* `UNIQUE (user_id, region_id, resource_type)`
 - *Index:* `idx_regional_depots_user_region ON regional_depots(user_id, region_id)`
 
-### 2.17 `kontor_auctions` (Phase 10 & Integrity Patch)
+### 2.17 `kontor_auctions` (v1.9.0 & v1.10.0)
 - `id`: `SERIAL PRIMARY KEY`
 - `region_id`: `INT NOT NULL REFERENCES regions(id)`
 - `start_time`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
@@ -207,7 +209,7 @@
 - *Index:* `idx_kontor_auctions_region_status ON kontor_auctions(region_id, status)`
 - *Index:* `idx_kontor_auctions_end_status ON kontor_auctions(end_time, status)`
 
-### 2.18 `regional_controllers` (Phase 10)
+### 2.18 `regional_controllers` (v1.9.0)
 - `region_id`: `INT PRIMARY KEY REFERENCES regions(id)`
 - `guild_id`: `INT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE`
 - `winning_bid`: `NUMERIC(14, 2) NOT NULL`
@@ -215,7 +217,7 @@
 - `valid_until`: `TIMESTAMPTZ NOT NULL`
 - *Index:* `idx_regional_controllers_valid ON regional_controllers(guild_id, valid_until)`
 
-### 2.19 `guild_contributions` (Phase 10)
+### 2.19 `guild_contributions` (v1.9.0)
 - `id`: `SERIAL PRIMARY KEY`
 - `guild_id`: `INT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE`
 - `user_id`: `INT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
@@ -223,11 +225,25 @@
 - `contributed_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - *Index:* `idx_guild_contributions_lookup ON guild_contributions(guild_id, user_id)`
 
-### 2.20 `rate_limits` (Phase 10 Integrity Patch)
+### 2.20 `rate_limits` (v1.10.0)
 - `id`: `BIGSERIAL PRIMARY KEY`
 - `client_key`: `VARCHAR(128) NOT NULL`
 - `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - *Composite Index:* `idx_rate_limits_client_key_created_at ON rate_limits (client_key, created_at DESC)`
+
+### 2.21 `npc_convoys` (v1.11.0)
+- `id`: `SERIAL PRIMARY KEY`
+- `convoy_name`: `VARCHAR(64) NOT NULL`
+- `origin_region_id`: `INT NOT NULL REFERENCES regions(id)`
+- `destination_region_id`: `INT NOT NULL REFERENCES regions(id)`
+- `resource_type`: `VARCHAR(32) NOT NULL`
+- `cargo_amount`: `NUMERIC(12, 2) NOT NULL`
+- `departure_at`: `TIMESTAMPTZ NOT NULL`
+- `arrival_at`: `TIMESTAMPTZ NOT NULL`
+- `status`: `VARCHAR(16) NOT NULL DEFAULT 'IN_TRANSIT'` (`IN_TRANSIT`, `LIQUIDATED`)
+- `created_at`: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- *Constraint:* `CHECK (status IN ('IN_TRANSIT', 'LIQUIDATED'))`
+- *Index:* `idx_npc_convoys_status_arrival ON npc_convoys(status, arrival_at)`
 
 ---
 
@@ -254,7 +270,7 @@ Warehouses (`Zentrallager`) have `resource = None` and remain upgradable across 
 $$\text{VWAP}_{24h}(r) = \frac{\sum_{t \in \text{Trades}_{24h}(r)} (\text{amount}_t \times \text{price}_t)}{\sum_{t \in \text{Trades}_{24h}(r)} \text{amount}_t}$$
 *Fallback Reference Prices:* Wood: 4.00, Stone: 5.00, Iron: 12.00, Grain: 3.00, Cloth: 8.00 Taler.
 
-### 3.5 7-Pillar Merchant Net Worth (Phase 10 Integrity Patch)
+### 3.5 7-Pillar Merchant Net Worth (v1.10.0)
 $$\text{Net Worth} = \text{Liquid Balance} + \text{Escrow}_{\text{BUY}} + \sum_{r} (\text{WarehouseInv}_r \times P(r)) + \sum_{r} (\text{Escrow}_{\text{SELL}}(r) \times P(r)) + \sum_{r} (\text{TransitCaravan}_r \times P(r)) + \sum_{r} (\text{Depot}_r \times P(r)) + \sum_{b} \text{SunkCapital}(b, L)$$
 $$\text{SunkCapital}(b, L) = \sum_{k=1}^{L-1} \left[ \text{cost}_{\text{balance}}(b, k) + \sum_{r} (\text{cost}_{r}(b, k) \times P(r)) \right]$$
 where $P(r)$ is the 24h-VWAP with fallback to the canonical reference price $\text{REFERENCE\_PRICES}[r]$.
@@ -265,7 +281,7 @@ where $P(r)$ is the 24h-VWAP with fallback to the canonical reference price $\te
 - **Export Contracts ("Handelskarawanen"):** 3 daily contracts expiring midnight UTC; consumed resources are permanently deleted from circulation in exchange for guaranteed Taler payouts.
 - **Guild Founding Fee:** $500.00$ Taler permanently deducted upon founding an alliance.
 
-### 3.7 Caravan Transit & Regional Logistics (Phase 9 & Integrity Patch)
+### 3.7 Caravan Transit & Regional Logistics (v1.8.0 & v1.10.0)
 $$\text{distance} = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2} \quad \text{[in Seemeilen / sm, gerundet auf 2 Dezimalstellen]}$$
 $$\text{duration\_seconds} = \text{round}(\text{distance} \times 12.0 \times \text{SpeedMultiplier})$$
 $$\text{arrival\_at} = \text{departure\_at} + \Delta t_{\text{duration}}$$
@@ -279,7 +295,7 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
   - At home Kontor: Unloaded into `inventories`, bounded by cumulative effective warehouse storage capacity.
 - **Depot Teleportation Prohibited:** Instantaneous transfer route `POST /caravans/depots/{region_id}/transfer` is permanently removed. All goods must physically transit via caravans.
 
-### 3.8 Dynamic Price Bands & Market Circuit Breakers (Phase 10)
+### 3.8 Dynamic Price Bands & Market Circuit Breakers (v1.9.0)
 - **Dynamic Price Bands (Market Volatility Circuit Breakers):**
   $$\text{ReferencePrice}(r) = \begin{cases} \text{VWAP}_{24h}(r) & \text{if volume}_{24h}(r) > 0 \\ \text{LastPrice}(r) & \text{else if exists} \\ \text{BasePrice}(r) & \text{otherwise} \end{cases}$$
   $$\text{Price Floor}(r) = \text{round}(0.50 \times \text{ReferencePrice}(r), 2)$$
@@ -287,7 +303,7 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
   $$\text{Valid Limit Order Price} \in [\text{Price Floor}(r), \text{Price Ceiling}(r)]$$
   Orders submitted outside the corridor are rejected with HTTP 422 (`Handelsspanne überschritten: Das Angebot weicht zu stark vom 24h-Marktwert ab`).
 
-### 3.9 Price Improvement Escrow Refunds & Wash-Trading Guard (Phase 10 Integrity Patch)
+### 3.9 Price Improvement Escrow Refunds & Wash-Trading Guard (v1.10.0)
 - **Price Improvement Refund:**
   When an aggressive buyer submits a limit order at $P_{\text{taker}} = P_{\text{limit}}$ that matches against a maker's resting sell order at $P_{\text{maker}} < P_{\text{limit}}$, the buyer receives an immediate atomic refund for the difference:
   $$\text{Refund} = \text{matched\_amount} \times (P_{\text{limit}} - P_{\text{maker}})$$
@@ -309,34 +325,47 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
 - Concurrent worker access is serialized per client key with transaction-level advisory locks `SELECT pg_advisory_xact_lock(hashtext(key))`.
 - Expired rate limit entries older than 1 hour are automatically pruned during evaluation and rolling maintenance (`prune_expired()`), preventing unbounded database table growth.
 
+### 3.12 Autonomous NPC Convoy Arbitrage & Liquidation (v1.11.0)
+- **Deficit Arbitrage Route Discovery:**
+  $$\text{Valid Route} = \{ (O, D, r) \mid \text{Multiplier}_O(r) > 1.0 \land \text{Multiplier}_D(r) == 0.0 \land O \ne D \}$$
+- **Transit Duration:**
+  $$\text{distance} = \sqrt{(x_D - x_O)^2 + (y_D - y_O)^2}$$
+  $$\text{duration\_seconds} = \text{round}(\text{distance} \times 12.0)$$
+- **Deterministic Liquidation on Arrival ($\text{NOW}() \ge \text{arrival\_at}$):**
+  1. Incoming cargo matches against resting player BUY orders within $[\text{Price Floor}(r), \text{Price Ceiling}(r)]$ ordered by $\text{limit\_price DESC}, \text{created\_at ASC}$.
+  2. Unfilled residual cargo is posted to the order book as a resting maker SELL order at $\min(\text{round}(1.10 \times \text{ReferencePrice}(r), 2), \text{Price Ceiling}(r))$.
+  3. Convoy status transitions to `LIQUIDATED`.
+- **Active Fleet Maintenance:**
+  Deterministic simulation on request cycles ensures at least 4 active `IN_TRANSIT` convoys navigate between surplus and deficit Kontors.
+
 ---
 
 ## 4. Implemented Features & Endpoints
 
-### Phase 1: Foundational Trading Platform
+### Version 1.0.0: Foundational Trading Platform
 - `POST /auth/register`, `POST /auth/login`, `GET /auth/logout`
 - `GET /` (Dashboard), `GET /resources/overview`
 - `POST /market/orders` (Atomic order book matching with `SELECT ... FOR UPDATE`, 2% fee)
 
-### Phase 2: Progression & Order Management
+### Version 1.1.0: Progression & Order Management
 - `POST /buildings/{id}/upgrade` (Multi-resource upgrade scaling)
 - `POST /market/orders/{id}/cancel` (Atomic escrow refund)
 - `GET /market/book` (Aggregated price depth ladder)
 
-### Phase 3: Catch-Up, Discovery, Balancing & Rate Limiting
+### Version 1.2.0: Catch-Up, Discovery, Balancing & Rate Limiting
 - `GET /resources/catchup`, `POST /resources/catchup/dismiss` ("While You Were Away" modal)
 - 24-Hour VWAP and recent 10 trade ledger
 - Starter allocation (200 Taler, 50 Wood, 50 Stone) + Idempotent CLI seeder (`seed_market.py`)
 - In-memory sliding-window rate limiter (15 orders/10s, 5 logins/60s)
 
-### Phase 4: Ranking, Security Hardening & PWA
+### Version 1.3.0: Ranking, Security Hardening & PWA
 - `GET /ranking` (Top 50 merchant leaderboard backed by 5-minute in-memory cache)
 - CSRF middleware (`X-CSRF-Token` header / double-submit cookie)
 - Hardened cookies (`HttpOnly`, `SameSite=Lax`, dynamic `Secure`)
 - Linux UFW firewall rules (22, 80, 443 allowed; 5432, 8000 denied)
 - Mobile/PWA (`/static/manifest.json`, `/static/sw.js`, `/static/icon.svg`, single-tap quick-fill)
 
-### Phase 5: Export Contracts, Notifications & Telemetry
+### Version 1.4.0: Export Contracts, Notifications & Telemetry
 - `GET /market/contracts` (Daily Handelskarawanen partial)
 - `POST /market/contracts/{id}/fulfill` (Atomic commodity burn and payout)
 - `GET /notifications` (Dropdown inbox partial)
@@ -344,7 +373,7 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
 - `POST /notifications/read-all` (Mark all notifications read)
 - `GET /admin/economy` (HTTP Basic Auth macro-economic telemetry)
 
-### Phase 6: Merchant Guilds, Cooperative Monuments & Alliance Buffs
+### Version 1.5.0: Merchant Guilds, Cooperative Monuments & Alliance Buffs
 - `GET /guilds` (Guild Hall for members, recruitment directory and founding form for unaffiliated)
 - `POST /guilds/create` (Found guild for 500 Taler, sets creator as `LEADER`)
 - `POST /guilds/{id}/join` (Join open merchant alliance)
@@ -354,7 +383,7 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
   - `FREIHAFEN`: Market trading fee reduced from 2.0% to 1.5% for all guild members.
   - `SPEICHERSTADT`: +10% flat storage capacity on all warehouse levels for all guild members.
 
-### Phase 7: Visual Overhaul, Quest Onboarding Tutorial & Merchant Handbook
+### Version 1.6.0: Visual Overhaul, Quest Onboarding Tutorial & Merchant Handbook
 - **Visual & Graphic Overhaul:**
   - Mercantile terminal styling: Deep maritime slate (`slate-950`, `slate-900`) and amber accents (`amber-500`, `amber-600`).
   - Crisp inline SVG icon system (`components/icons.html`) replacing text labels and emojis.
@@ -367,7 +396,7 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
 - **Living In-Game Merchant Handbook ("Das Kontor-Handbuch"):**
   - `GET /handbuch` (Indexed reference manual directly exposing backend formulas, building costs, reference prices, and guild perks).
 
-### Phase 8: Regional Specialization & Asymmetric Resource Scarcity
+### Version 1.7.0: Regional Specialization & Asymmetric Resource Scarcity
 - **Database Migration (`007_phase8_regions.sql`):**
   - `regions` table with coordinates, tags, and JSONB multiplier maps.
   - Foreign key `region_id` on `users` table with migration fallback to `Ostseeküste (Danzig)`.
@@ -381,7 +410,7 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
   - Top navigation bar & Kontor resource overview render merchant's Home Region badge with Tag and Coordinates.
   - Commodity cards and building tables dynamically badge active modifiers (`+50% Bonus`, `-20% Malus`, `0.0x Reine Importware`) and disable upgrades for non-indigenous resources with *"Nicht förderbar"*.
 
-### Phase 9: Caravan Expeditions, Travel Durations & Regional Depots
+### Version 1.8.0: Caravan Expeditions, Travel Durations & Regional Depots
 - **Database Migration (`008_phase9_caravans.sql`):**
   - `caravans` table tracking origin, destination, JSONB cargo, departure, arrival timestamps, and status (`EN_ROUTE`, `ARRIVED`, `UNLOADED`, `CANCELLED`).
   - `regional_depots` table providing persistent storage per merchant, region, and commodity with unique constraints.
@@ -401,7 +430,7 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
   - Tutorial Step 6 ("6. Die erste Expedition"): Disburses 100.00 Taler & 30.00 Tuch upon dispatching an overseas expedition.
   - Merchant Handbook (`/handbuch`): Section 8 ("Logistik, Übersee-Expeditionen & Regionaldepots") with formulas, capacity limits, and depot mechanics.
 
-### Phase 10: Dynamic Price Bands, Guild Territory & Kontor Auctions
+### Version 1.9.0: Dynamic Price Bands, Guild Territory & Kontor Auctions
 - **Database Migration (`009_phase10_auctions.sql` & `011_phase10_integrity.sql`):**
   - `kontor_auctions`: 7-day cyclical bidding epochs for territorial control over each region with current bid, highest bidder guild, `start_time`, and `end_time`.
   - `regional_controllers`: Tracks active guild sovereignty, winning bid amount, and validity expiration per region.
@@ -420,7 +449,7 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
   - **Trade Tax Dividend:** 0.5% regional trade dividend credited to controlling guild's treasury on market sales.
   - Crown badges (`👑 [TAG]`) render next to controlling regions on top nav bar, expedition cards, and Kontor screens.
 
-### Comprehensive Economic & System Integrity Hardening (Phase 10 Integrity Patch)
+### Version 1.10.0: Economic & System Integrity Hardening
 - **Price Improvement Escrow Refunds (`app/engine/matching.py`):**
   - In aggressive order matching where a buyer bids higher than a resting maker's limit price ($P_{\text{limit}} > P_{\text{maker}}$), the difference is immediately and atomically refunded to the buyer's balance, recording `price_improvement_refund` in `trades_executed`.
 - **Wash-Trading Rejection (`app/engine/matching.py` & `app/routes/market.py`):**
@@ -439,14 +468,31 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
   - Created `ensure_active_auctions()` initializing 7-day auctions with `current_highest_bid = 0.0` for any Hanseatic region without an active epoch.
   - Bound to application lifespan startup hook in `app/main.py` for automated initialization on deployment.
 
+### Version 1.11.0: Autonomous Hanseatic NPC Convoys, Inline SVG Price Charts & GitHub Actions CI
+- **Database Migration (`012_phase11_convoys.sql`):**
+  - Created `npc_convoys` table with origin/destination foreign keys, cargo tracking, departure/arrival timestamps, check constraint on status (`IN_TRANSIT`, `LIQUIDATED`), and composite index `idx_npc_convoys_status_arrival`.
+- **Autonomous NPC Trade Convoy Engine (`app/engine/convoys.py`):**
+  - `simulate_npc_convoys(cur, min_convoys=4)`: Discovers valid surplus-to-deficit trade routes ($>1.0x \to 0.0x$), calculates transit duration using standard Euclidean distance ($\Delta t = \text{round}(d \times 12.0)$), and maintains at least 4 active convoys across the Hanseatic network.
+  - `liquidate_npc_convoy(cur, convoy_id)`: Atomically matches arriving cargo against open player BUY orders within the dynamic price corridor; places remaining unfilled cargo as resting SELL orders at $1.10 \times \text{ReferencePrice}(r)$; credits 0.5% regional trade tax dividends to destination controllers.
+  - `get_active_npc_convoys(cur)`: Provides real-time fleet telemetry, countdowns, and progress percentages.
+- **Zero-Dependency Inline SVG Price Charts (`app/engine/charts.py`):**
+  - `generate_price_chart_svg(cur, resource_type)`: Server-rendered SVG `<svg viewBox="0 0 300 80">` plotting 24h trade price history, area fill gradient, min/max metrics, and dashed amber 24h-VWAP marker line.
+  - Graceful fallback rendering a neutral baseline reference line when 24h trade volume is zero.
+  - Embedded seamlessly in the dual-column market view (`app/templates/components/market.html`).
+- **Continuous Integration Pipeline (`.github/workflows/ci.yml`):**
+  - GitHub Actions CI workflow provisioning a PostgreSQL 16 service container, applying all SQL migrations sequentially (`migrations/*.sql`), installing Python 3.12 dependencies, and executing `pytest -v` on push and PR to `main`.
+- **Modular Quest Engine & Handbook Expansion:**
+  - Tutorial Step 8 ("Marktanalyse & Flottenarbitrage") in `app/engine/tutorial.py` and `app/engine/tutorial_registry.py`: Validates $\ge 2$ completed player exchange trades; disburses 150.00 Taler and 30.00 Eisen reward.
+  - Living Handbook (`/handbuch` & `app/templates/components/handbook.html`): Added Section 11 ("Autonome Hanseflotten & Preischart-Analyse") documenting convoy spawn mechanics, deficit arbitrage paths, liquidation matching, and SVG chart reading.
+
 ---
 
 ## 5. Test Suite Metrics
 
 All tests execute cleanly directly against PostgreSQL on the production server:
-- **Total Test Files:** 16
-- **Total Tests:** 74
-- **Pass Rate:** 100% (74 passed in 23.64s)
+- **Total Test Files:** 17
+- **Total Tests:** 79
+- **Pass Rate:** 100% (79 passed in 19.66s)
 
 | Test File | Tests | Coverage Scope |
 | :--- | :--- | :--- |
@@ -455,6 +501,8 @@ All tests execute cleanly directly against PostgreSQL on the production server:
 | `tests/test_e2e_http.py` | 1 | Full end-to-end HTTP registration, building upgrade, and trade matching |
 | `tests/test_economic_integrity.py` | 6 | Price improvement refunds, Wash-trading guard (HTTP 422), 7-pillar comprehensive net worth valuation, Removal of instant depot teleportation & Return caravan transit/unloading, Automated 1-hour rate limit pruning, Idempotent Kontor auction auto-initialization |
 | `tests/test_market_and_auth.py` | 3 | Password hashes, session tokens, building upgrades, order cancellation |
+| `tests/test_phase10_auctions_and_limits.py` | 7 | Dynamic price bands [0.5x, 2.0x VWAP], War Chest deposits, Kontor auction bidding & outbid refund, epoch resolution, speed bonuses, regional trade tax dividends, tutorial step 7, HTTP endpoints |
+| `tests/test_phase11_convoys_and_charts.py` | 5 | Deficit-targeted NPC convoy generation, Liquidation matching against player BUY orders and 1.10x resting asks, SVG price chart polyline & VWAP bounds, Tutorial Step 8 verification and reward claim, HTTP market & handbook rendering |
 | `tests/test_phase3_features.py` | 6 | Offline catch-up, VWAP metrics, order input validation, rate limiter, seeder |
 | `tests/test_phase4_features.py` | 5 | Net worth math, capital conservation, ranking cache, CSRF middleware, PWA assets |
 | `tests/test_phase5_features.py` | 4 | Export contracts, trade notification dispatch, economic telemetry, HTMX flow |
@@ -462,7 +510,6 @@ All tests execute cleanly directly against PostgreSQL on the production server:
 | `tests/test_phase7_tutorial.py` | 4 | Tutorial quest progression & rewards, duplicate claim prevention, handbook accuracy, SVG template integrity |
 | `tests/test_phase8_regions.py` | 6 | Registration validation, regional yield scaling, 0.0-yield upgrade blocking, warehouse universal upgrades, matrix & UI badges |
 | `tests/test_phase9_caravans.py` | 6 | Euclidean distance & transit duration math, capacity limits, atomic deduction, arrival status resolution, depot unloading & transfer, tutorial step 6 claim, HTTP rendering |
-| `tests/test_phase10_auctions_and_limits.py` | 7 | Dynamic price bands [0.5x, 2.0x VWAP], War Chest deposits, Kontor auction bidding & outbid refund, epoch resolution, speed bonuses, regional trade tax dividends, tutorial step 7, HTTP endpoints |
 | `tests/test_production.py` | 2 | Offline production delta calculation and storage cap enforcement |
 | `tests/test_progression_and_cancel.py` | 5 | Multi-resource upgrade sufficiency/rollback, warehouse cap, aggregated depth |
 | `tests/test_system_integrity.py` | 7 | Regional depot capacity limit, guild disbandment on sole leader exit, officer succession priority, trades in uncontrolled regions, negative time delta guard, atomic cancellation race condition, multi-worker rate limiter simulation |
@@ -471,7 +518,6 @@ All tests execute cleanly directly against PostgreSQL on the production server:
 
 ## 6. Outstanding Backlog & Roadmap
 
-1. **Automated Continuous Integration (CI):** GitHub Actions workflow running `pytest` against ephemeral PostgreSQL test containers on pull requests.
-2. **Automated NPC Caravans & Hanseatic Trade Convoys:** Dynamic scheduled NPC cargo fleets navigating between regional Kontors to stimulate trade volume and provide counterparty liquidity.
-3. **Naval Blockades & Piracy Risk Events:** Dynamic sea-lane hazard conditions modifying caravan transit durations and cargo insurance mechanisms.
-4. **Historical Price Charts & Candlesticks:** Lightweight client-side charting of price discovery history and 24h VWAP trends using canvas/SVG.
+1. **Naval Blockades & Piracy Risk Events:** Dynamic sea-lane hazard conditions modifying caravan transit durations and cargo insurance mechanisms.
+2. **Historical Price Candlestick Modals:** Multi-timeframe candlesticks (1h, 4h, 1d) on click of inline SVG charts.
+3. **Advanced Guild Territorial Alliances & Treaties:** Non-aggression pacts and shared port access between merchant guilds.
