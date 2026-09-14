@@ -1,6 +1,7 @@
 import pytest
 import time
 import json
+import uuid
 from starlette.testclient import TestClient
 
 from app.main import app
@@ -131,7 +132,7 @@ def test_tutorial_progression_and_rewards(db_conn):
         # Give enough Taler to found a guild
         cur.execute("UPDATE users SET balance = balance + 500.0 WHERE id = %s", (u_id,))
         db_conn.commit()
-        create_guild(cur, u_id, f"TutorialGuild_{ts}", f"TG{str(ts)[-3:]}")
+        create_guild(cur, u_id, f"TutorialGuild_{ts}", f"T{uuid.uuid4().hex[:4].upper()}")
         db_conn.commit()
         assert is_step_eligible(cur, u_id, 5) is True
 
