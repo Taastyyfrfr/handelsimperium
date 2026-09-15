@@ -1,9 +1,9 @@
 # Project State: Handelsimperium
 
-**Generated:** 2026-09-14T19:42:00+02:00  
+**Generated:** 2026-09-15T12:55:00+02:00  
 **Repository Branch:** `main`  
-**Latest Git Commit:** `883b165168ca323639b1994e632181d641b68785`  
-**Current Version:** `v1.11.0`  
+**Latest Git Commit:** `54f8810`  
+**Current Version:** `v1.11.1`  
 **Release Tag:** [`v1.11.0`](https://github.com/Taastyyfrfr/handelsimperium/releases/tag/v1.11.0)  
 **Production Host:** `80.158.79.44` (`ssh server`)  
 **Public Endpoint:** [http://80.158.79.44/](http://80.158.79.44/)
@@ -485,14 +485,23 @@ $$\text{Total Cargo} = \sum_{r \in \text{Resources}} \text{amount}_r \le 250.0 \
   - Tutorial Step 8 ("Marktanalyse & Flottenarbitrage") in `app/engine/tutorial.py` and `app/engine/tutorial_registry.py`: Validates $\ge 2$ completed player exchange trades; disburses 150.00 Taler and 30.00 Eisen reward.
   - Living Handbook (`/handbuch` & `app/templates/components/handbook.html`): Added Section 11 ("Autonome Hanseflotten & Preischart-Analyse") documenting convoy spawn mechanics, deficit arbitrage paths, liquidation matching, and SVG chart reading.
 
+### Version 1.11.1: Browser Stream Preservation, Progressive Auth & Guest Routing Hardening
+- **CSRF Request Stream Preservation (`app/csrf.py`):**
+  - Resolved an issue where Starlette's `CSRFMiddleware` consumed the incoming request body stream via `await request.form()`, starving downstream route handlers (`def login(...)` and `def register(...)`) and triggering HTTP 422 ("Field required") on native browser form posts.
+  - Implemented stream-preserving body buffering with downstream request re-wrapping so all form parameters reach endpoint handlers intact.
+- **Progressive Enhancement for Authentication (`app/templates/auth/login.html` & `app/templates/auth/register.html`):**
+  - Added `hx-boost="true"` to login and register forms, allowing seamless SPA-like submissions with automatic `X-CSRF-Token` headers while maintaining 100% functional native browser fallback.
+- **Graceful Guest Access Routing (`app/routes/handbook.py` & `app/routes/ranking.py`):**
+  - Replaced strict dependencies with `get_current_user_optional`. Direct unauthenticated browser requests cleanly redirect to `/auth/login` (HTTP 303), while HTMX partial requests return HTTP 401.
+
 ---
 
 ## 5. Test Suite Metrics
 
 All tests execute cleanly directly against PostgreSQL on the production server:
 - **Total Test Files:** 18
-- **Total Tests:** 92
-- **Pass Rate:** 100% (92 passed in 32.90s)
+- **Total Tests:** 93
+- **Pass Rate:** 100% (93 passed in 26.51s)
 
 | Test File | Tests | Coverage Scope |
 | :--- | :--- | :--- |
