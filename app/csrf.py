@@ -42,8 +42,20 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     or "multipart/form-data" in content_type
                 ):
                     try:
-                        form = await request.form()
+                        body = await request.body()
+
+                        async def receive_temp():
+                            return {"type": "http.request", "body": body, "more_body": False}
+
+                        temp_req = Request(request.scope, receive_temp)
+                        form = await temp_req.form()
                         submitted_token = form.get("csrf_token")
+
+                        # Re-wrap receive so downstream route handlers can read form fields
+                        async def receive_downstream():
+                            return {"type": "http.request", "body": body, "more_body": False}
+
+                        request = Request(request.scope, receive_downstream)
                     except Exception:
                         pass
 

@@ -191,12 +191,13 @@ def test_csrf_middleware_protection():
     )
     assert post_valid_header.status_code != 403
 
-    # 5. POST with valid form field matching cookie -> Accepted past middleware
+    # 5. POST with valid form field matching cookie -> Accepted past middleware and parsed by FastAPI
     post_valid_form = client.post(
         "/auth/login",
         data={"username": "nonexistent_merchant", "password": "wrong_password", "csrf_token": token_val},
     )
-    assert post_valid_form.status_code != 403
+    assert post_valid_form.status_code == 400
+    assert "Ungültiger Benutzername" in post_valid_form.text
 
 def test_pwa_manifest_and_sw_assets():
     """
@@ -225,3 +226,26 @@ def test_pwa_manifest_and_sw_assets():
     icon_res = client.get("/static/icon.svg")
     assert icon_res.status_code == 200
     assert "<svg" in icon_res.text
+
+def test_guest_redirects_for_handbook_and_ranking():
+    """
+    Verifies that unauthenticated guest requests to /handbuch and /ranking
+    cleanly redirect to /auth/login (HTTP 303), while HTMX requests return 401.
+    """
+    client = TestClient(app)
+
+    # 1. Non-HTMX direct browser requests redirect to login
+    hb_res = client.get("/handbuch", follow_redirects=False)
+    assert hb_res.status_code == 303
+    assert hb_res.headers["location"] == "/auth/login"
+
+    rk_res = client.get("/ranking", follow_redirects=False)
+    assert rk_res.status_code == 303
+    assert rk_res.headers["location"] == "/auth/login"
+
+    # 2. HTMX partial requests return 401 Unauthorized
+    hb_htmx = client.get("/handbuch", headers={"HX-Request": "true"})
+    assert hb_htmx.status_code == 401
+
+    rk_htmx = client.get("/ranking", headers={"HX-Request": "true"})
+    assert rk_htmx.status_code == 401

@@ -18,7 +18,7 @@
         </div>
         {% endif %}
 
-        <form action="/auth/register" method="POST" class="space-y-6">
+        <form action="/auth/register" method="POST" hx-boost="true" class="space-y-6">
             <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
 
             <!-- Account Details -->

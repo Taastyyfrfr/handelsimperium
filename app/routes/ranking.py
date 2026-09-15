@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Request, Depends
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Request, Depends, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from datetime import datetime, timezone
 import os
 
-from app.auth import get_current_user
+from app.auth import get_current_user_optional
 from app.database import get_db_connection
 from app.engine.ranking import ranking_cache
 
@@ -14,8 +14,15 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), ".
 @router.get("", response_class=HTMLResponse)
 def get_ranking_view(
     request: Request,
-    user: dict = Depends(get_current_user),
 ):
+    user = get_current_user_optional(request)
+    is_htmx = bool(request.headers.get("HX-Request"))
+
+    if not user:
+        if is_htmx:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=401, detail="Nicht authentifiziert. Bitte einloggen.")
+        return RedirectResponse(url="/auth/login", status_code=status.HTTP_303_SEE_OTHER)
     """
     Renders HTMX-partial for the merchant leaderboard.
     Displays the top 50 merchants plus personal rank breakdown,

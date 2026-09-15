@@ -1,9 +1,9 @@
 import os
-from fastapi import APIRouter, Request, Depends
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Request, Depends, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.auth import get_current_user, get_user_by_id
+from app.auth import get_current_user_optional, get_user_by_id
 from app.database import get_db_connection
 from app.config import (
     settings,
@@ -25,8 +25,15 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), ".
 @router.get("", response_class=HTMLResponse)
 def get_handbook(
     request: Request,
-    user: dict = Depends(get_current_user),
 ):
+    user = get_current_user_optional(request)
+    is_htmx = bool(request.headers.get("HX-Request"))
+
+    if not user:
+        if is_htmx:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=401, detail="Nicht authentifiziert. Bitte einloggen.")
+        return RedirectResponse(url="/auth/login", status_code=status.HTTP_303_SEE_OTHER)
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             fresh_user = get_user_by_id(cur, user["id"])
